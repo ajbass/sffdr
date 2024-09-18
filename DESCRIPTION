@@ -1,11 +1,11 @@
 Package: sffdr
 Type: Package
-Title: Surrogate Functional False Discovery Rates for Genome-Wide Studies
+Title: Surrogate Functional False Discovery Rates for Genome-Wide Association Studies
 Version: 1.0.0
 Authors@R: c(person("Andrew", "Bass", email ="ab3105@cam.ac.uk", role = c("aut", "cre")),
              person("Chris", "Wallace", email ="chris.wallace@cam.ac.uk", role = c("aut")))
 Maintainer: Andrew Bass <ab3105@cam.ac.uk>
-Description: Leveraging informative variables to improve power in genome-wide studies using the surrogate functional false discovery rate (sfFDR) framework. sfFDR builds from the fFDR methodology to estimate FDR quantities given many informative variables. Our non-parametric approach can handle a large number of p-values and multiple informative variables.
+Description: Pleiotropy-informed significance analysis of genome-wide association studies with functional false discovery rates (fFDR). Our approach, surrogate fFDR, integrates summary statistics of related traits to increase power within the fFDR framework. The sfFDR framework provides estimates of key FDR quantities in a significance analysis such as the functional local FDR and $q$-value, and uses these estimates to derive a functional $p$-value for type I error rate control and a functional local Bayes' factor for post-GWAS analyses (e.g., fine mapping and colocalization). 
 URL: https://github.com/ajbass/sffdr
 License: LGPL
 Encoding: UTF-8

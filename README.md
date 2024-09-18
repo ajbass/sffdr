@@ -11,10 +11,12 @@
 ## Overview
 
 The `sffdr` package implements the surrogate functional false discovery
-rate (sfFDR) procedure on a set of p-values from a GWAS of interest and
-a set of p-values (or test statistics) from one or many informative
-GWAS. There are a few key quantities estimated by the package: the
-functional q-value, functional local FDR, and functional p-value.
+rate (sfFDR) procedure which integrates GWAS summary statistics of
+related traits to increase power within the fFDR framework. The inputs
+into `ssfdr` are a set of p-values from a GWAS of interest and a set of
+p-values (or test statistics) from one or many informative GWAS. There
+are a few key quantities estimated by the package: the functional
+q-value, functional local FDR, and functional p-value.
 
 The quantities estimated by `sffdr` can be used for a variety of
 significance analyses in genome-wide studies while incorporating
