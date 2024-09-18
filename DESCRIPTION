@@ -1,0 +1,31 @@
+Package: sffdr
+Type: Package
+Title: Surrogate Functional False Discovery Rates for Genome-Wide Studies
+Version: 1.0.0
+Authors@R: c(person("Andrew", "Bass", email ="ab3105@cam.ac.uk", role = c("aut", "cre")),
+             person("Chris", "Wallace", email ="chris.wallace@cam.ac.uk", role = c("aut")))
+Maintainer: Andrew Bass <ab3105@cam.ac.uk>
+Description: Leveraging informative variables to improve power in genome-wide studies using the surrogate functional false discovery rate (sfFDR) framework. sfFDR builds from the fFDR methodology to estimate FDR quantities given many informative variables. Our non-parametric approach can handle a large number of p-values and multiple informative variables.
+URL: https://github.com/ajbass/sffdr
+License: LGPL
+Encoding: UTF-8
+VignetteBuilder: knitr
+LazyData: true
+Depends: R (>= 3.4.0)
+Imports: 
+    locfit,
+    splines,
+    dplyr,
+    ggplot2,
+    patchwork,
+    gam,
+    qvalue,
+    tibble,
+    tidyr,
+    Rcpp
+Suggests: 
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+LinkingTo: Rcpp
+RoxygenNote: 7.3.1
