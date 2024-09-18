@@ -10,7 +10,7 @@
 
 ## Overview
 
-<img src="inst/figures/sffdr.png" align="right" height="100" />
+<img src="inst/figures/sffdr.png" align="right" height="150" />
 
 The `sffdr` package implements the surrogate functional false discovery
 rate (sfFDR) procedure which integrates GWAS summary statistics of
