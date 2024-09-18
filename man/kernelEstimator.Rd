@@ -47,7 +47,7 @@ variance. This parameter fixes the estimate on the intervals
 if cv=FALSE}
 }
 \description{
-This function is adapted from the fFDR package
+This function is adapted from the fFDR package.
 }
 \details{
 Provide density estimates that are needed by \code{fqvalue}

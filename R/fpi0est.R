@@ -175,8 +175,6 @@ fpi0est <- function(p,
   ret
 }
 
-
-
 # From fFDR package
 constrained.binomial = function(maximum) {
   link <- structure(list(name = paste0("constrained.logit (0, ", maximum, ")"),
@@ -203,5 +201,3 @@ constrained.binomial = function(maximum) {
 
   fam
 }
-
-

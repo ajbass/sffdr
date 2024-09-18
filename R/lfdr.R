@@ -1,4 +1,4 @@
-# Note that pi0 can be a vector of pi0 values
+# Internal use at the moment, eventually will be public
 gwasQvalue <- function(p,
                        indep_snps = NULL,
                        trunc = TRUE,

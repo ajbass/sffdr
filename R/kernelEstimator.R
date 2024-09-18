@@ -21,7 +21,7 @@
 #' @param ... additional arguments to be passed to lp in locfit, used only
 #' if cv=FALSE
 #'
-#' @description This function is adapted from the fFDR package
+#' @description This function is adapted from the fFDR package.
 #' @export
 kernelEstimator <- function(x,
                             transformation = "probit",

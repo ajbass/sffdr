@@ -18,6 +18,21 @@ fpvalues_raw <- function(lfdr) {
               fq = fdr))
 }
 
+#' @title
+#' Functional p-values
+#'
+#' @description
+#' Calculate functional p-values from functional local FDRs. Internal use.
+#'
+#' @param lfdr A vector of functional local FDRs of a region
+#' @param p A vector of p-values. Default is NULL.
+#'
+#' @return
+#' A list of object type "sffdr" containing:
+#' \item{fp}{Functional p-values.}
+#' \item{fq}{Functional q-values.}
+#'
+#' @export
 fpvalues <- function(lfdr, p = NULL) {
   if (is.null(p)) return(fpvalues_raw(lfdr)) # ignore order of p
   p_out <- fdr_out <- rep(NA, length(p))

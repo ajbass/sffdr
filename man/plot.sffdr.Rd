@@ -20,29 +20,6 @@ Nothing of interest.
 \description{
 Graphical display of the sffdr object
 }
-\details{
-The function plot allows one to view several plots:
-\enumerate{
- \item The estimated \eqn{\pi_0}{pi_0} versus the tuning parameter
- \eqn{\lambda}{lambda}.
- \item The q-values versus the p-values.
- \item The number of significant tests versus each q-value cutoff.
- \item The number of expected false positives versus the number of
- significant tests.
- }
-
-This function makes four plots. The first is a plot of the
-estimate of \eqn{\pi_0}{pi_0} versus its tuning parameter
-\eqn{\lambda}{lambda}. In most cases, as \eqn{\lambda}{lambda}
-gets larger, the bias of the estimate decreases, yet the variance
-increases. Various methods exist for balancing this bias-variance
-trade-off (Storey 2002, Storey & Tibshirani 2003, Storey, Taylor
-& Siegmund 2004). Comparing your estimate of \eqn{\pi_0}{pi_0} to this
-plot allows one to guage its quality. The remaining three plots
-show how many tests are called significant and how many false
-positives to expect for each q-value cut-off. A thorough discussion of
-these plots can be found in Storey & Tibshirani (2003).
-}
 \examples{
 # import data
 data(bmi)
