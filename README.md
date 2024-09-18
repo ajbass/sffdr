@@ -8,9 +8,9 @@
 <!---[![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/sffdr)](https://cran.r-project.org/package=lit)--->
 <!-- badges: end -->
 
-## Overview 5.08cm x 4.39cm
+## Overview
 
-<img src="inst/figures/sffdr.png" align="right" height="192" width = "164"/>
+<img src="inst/figures/sffdr.png" align="right" height="100" />
 
 The `sffdr` package implements the surrogate functional false discovery
 rate (sfFDR) procedure which integrates GWAS summary statistics of
