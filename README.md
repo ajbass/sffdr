@@ -4,11 +4,13 @@
 <!-- badges: start -->
 
 [![R-CMD-check](https://github.com/ajbass/sffdr/actions/workflows/R-CMD-check.yml/badge.svg)](https://github.com/ajbass/sffdr/actions/workflows/R-CMD-check.yml)
-<!---[![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/sffdr)](https://cran.r-project.org/package=lit)--->
 
+<!---[![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/sffdr)](https://cran.r-project.org/package=lit)--->
 <!-- badges: end -->
 
 ## Overview
+
+<img src="inst/figures/sffdr.png" align="right" height="100" />
 
 The `sffdr` package implements the surrogate functional false discovery
 rate (sfFDR) procedure which integrates GWAS summary statistics of
@@ -129,4 +131,7 @@ sffdr_out <- sffdr(p,
                    epsilon = min(p))   
 ```
 
-See `?sffdr` for additional details and input arguments.
+Note that the LD-independent SNPs will be used for model fitting in
+sfFDR, and then functional p-values, q-values, and local FDRs will be
+estimated for all SNPs. See `?sffdr` for additional details and input
+arguments.
