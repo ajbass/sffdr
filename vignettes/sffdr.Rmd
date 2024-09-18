@@ -112,5 +112,5 @@ sffdr_out <- sffdr(p,
                    epsilon = min(p))   
 ```
 
-See `?sffdr` for additional details and input arguments.
+Note that the LD-independent SNPs will be used for model fitting in sfFDR, and then functional p-values, q-values, and local FDRs will be estimated for all SNPs. See `?sffdr` for additional details and input arguments.
 
