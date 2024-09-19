@@ -2,7 +2,7 @@
 % Please edit documentation in R/fpi0est.R
 \name{fpi0est}
 \alias{fpi0est}
-\title{Estimate the functional proportion of null tests given a set of informative variables.}
+\title{Estimate the functional proportion of null tests}
 \usage{
 fpi0est(
   p,
@@ -43,12 +43,12 @@ A list of object type "fpi0" containing:
 \item{lambda.hat}{The chosen lambda value.}
 }
 \description{
-Estimate the functional proportion of null tests given a set of informative variables.
+he function \code{\link{fpi0est}} estimates the functional proportion of null tests given
+a set of informative variables.
 }
 \details{
-The function \code{\link{fpi0est}} estimates the functional proportion of null tests given
-a set of informative variables. This code extends the function from the fFDR package to handle
-multiple informative variables.
+This code extends the function from the fFDR package to handle
+multiple informative variables and linkage disequilibrium.
 }
 \examples{
 # import data

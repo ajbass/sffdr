@@ -7,7 +7,7 @@
 ffinemap(flfdr, fpi0)
 }
 \arguments{
-\item{flfdr}{A vector of functional local FDRs of a region}
+\item{flfdr}{A vector of functional local FDRs of a region of interest}
 
 \item{fpi0}{An estimate of the function proportion of null tests}
 }
@@ -17,5 +17,5 @@ A list of object type "sffdr" containing:
 \item{PP}{Posterior probability of a SNP being causal.}
 }
 \description{
-Perform functional fine mapping with a set of functional local FDRs (assuming a single causal variant).
+Perform functional fine mapping with a set of functional local FDRs in a region of interest (assuming a single causal variant).
 }

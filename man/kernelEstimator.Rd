@@ -50,5 +50,5 @@ if cv=FALSE}
 This function is adapted from the fFDR package.
 }
 \details{
-Provide density estimates that are needed by \code{fqvalue}
+Provide density estimates that are needed by \code{sffdr}
 }
