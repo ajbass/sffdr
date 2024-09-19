@@ -2,9 +2,9 @@
 #' Functional fine mapping
 #'
 #' @description
-#' Perform functional fine mapping with a set of functional local FDRs (assuming a single causal variant).
+#' Perform functional fine mapping with a set of functional local FDRs in a region of interest (assuming a single causal variant).
 #'
-#' @param flfdr A vector of functional local FDRs of a region
+#' @param flfdr A vector of functional local FDRs of a region of interest
 #' @param fpi0 An estimate of the function proportion of null tests
 #'
 #' @return

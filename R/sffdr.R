@@ -4,21 +4,20 @@
 #'
 #' @description
 #' Estimate the functional p-values, q-values, and local false discovery rates given a set of p-values and informative
-#' variables. The functional p-values is mapping from the q-value (FDR-based measure) to a p-value for family-wise error rate control.
+#' variables. The functional p-values is mapping from the functional q-value (FDR-based measure) to a p-value for type I error rate control.
 #'
 #' @details
 #' The function \code{\link{fpi0est}} should be called externally to estimate the
 #' functional proportion of null tests given the set of informative variables.
-#' The surrogate functional FDR methodology builds from the functional FDR (reference below)
-#' methodology and implements some of the functions from the package (denoted in documentation).
-#' Note that if there is only a single informative variable then the function reduces to fFDR framework.
+#' The surrogate functional FDR methodology builds from the functional FDR
+#' methodology and implements some of the functions from the package.
 #'
 #' @param p.value A vector of p-values.
 #' @param fpi0 An estimate of the function proportion of null tests using the \code{\link{fpi0est}} function.
 #' @param surrogate A surrogate variable that compresses more than one informative variables.
 #' Default is NULL. If \code{fpi0} is specified and \code{surrogate} is NULL then \code{fpi0} is used as the surrogate variable.
 #' @param indep_snps A boolean vector (same size as p) specifying the set of independent tests. Default is NULL and all tests are treated independently.
-#' @param monotone.window Enforce monotonicity at specified step size. See fFDR paper below. Default is NULL.
+#' @param monotone.window Enforce monotonicity at specified step size. Default is NULL.
 #' @param epsilon A numerical value the truncation for the p-values during density estimation. Default is 1e-15. You may want to consider decreasing this value if there are a substantial number of small p-values.
 #' @param nn A numerical value specifying the nearest neighbor parameter in \code{\link{kernelEstimator}}. Default is NULL.
 #' @param fp_ties A boolean specifying whether ties should be broken using the ordering of the p-values when calculating the fp-values. Only impacts the tests when the local FDR is tied. Default is TRUE.

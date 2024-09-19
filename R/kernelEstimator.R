@@ -1,7 +1,7 @@
 #' Estimate a density on the unit interval or unit square via
 #' local regression
 #'
-#' Provide density estimates that are needed by \code{fqvalue}
+#' Provide density estimates that are needed by \code{sffdr}
 #'
 #' @param x Either a vector or a 2-column matrix
 #' @param transformation Either probit (default), complementary log-log, or

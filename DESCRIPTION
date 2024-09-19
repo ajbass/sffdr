@@ -5,7 +5,7 @@ Version: 1.0.0
 Authors@R: c(person("Andrew", "Bass", email ="ab3105@cam.ac.uk", role = c("aut", "cre")),
              person("Chris", "Wallace", email ="chris.wallace@cam.ac.uk", role = c("aut")))
 Maintainer: Andrew Bass <ab3105@cam.ac.uk>
-Description: Pleiotropy-informed significance analysis of genome-wide association studies with functional false discovery rates (fFDR). Our approach, surrogate fFDR, integrates summary statistics of related traits to increase power within the fFDR framework. The sfFDR framework provides estimates of key FDR quantities in a significance analysis such as the functional local FDR and $q$-value, and uses these estimates to derive a functional $p$-value for type I error rate control and a functional local Bayes' factor for post-GWAS analyses (e.g., fine mapping and colocalization). 
+Description: Pleiotropy-informed significance analysis of genome-wide association studies with surrogate functional false discovery rates (sfFDR). The sfFDR framework  adapts the fFDR to leverage informative data from multiple sets of GWAS summary statistics to increase power in study while accommodating for linkage disequilibrium. sfFDR provides estimates of key FDR quantities in a significance analysis such as the functional local FDR and $q$-value, and uses these estimates to derive a functional $p$-value for type I error rate control and a functional local Bayes' factor for post-GWAS analyses (e.g., fine mapping and colocalization). 
 URL: https://github.com/ajbass/sffdr
 License: LGPL
 Encoding: UTF-8

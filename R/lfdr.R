@@ -1,4 +1,5 @@
-# Internal use at the moment, eventually will be public
+# Implements standard Q-value using local FDR for GWAS data
+# Internal use at the moment, eventually will be public.
 gwasQvalue <- function(p,
                        indep_snps = NULL,
                        trunc = TRUE,

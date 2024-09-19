@@ -1,13 +1,13 @@
 #' @title
-#' Estimate the functional proportion of null tests given a set of informative variables.
+#' Estimate the functional proportion of null tests
 #'
 #' @description
-#' Estimate the functional proportion of null tests given a set of informative variables.
+#' he function \code{\link{fpi0est}} estimates the functional proportion of null tests given
+#' a set of informative variables.
 #'
 #' @details
-#' The function \code{\link{fpi0est}} estimates the functional proportion of null tests given
-#' a set of informative variables. This code extends the function from the fFDR package to handle
-#' multiple informative variables.
+#' This code extends the function from the fFDR package to handle
+#' multiple informative variables and linkage disequilibrium.
 #'
 #' @param p A vector of p-values.
 #' @param z A vector of informative variables

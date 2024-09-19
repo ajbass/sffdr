@@ -6,7 +6,7 @@
 #'
 #' @description The summary level data is a subset of independent SNPs
 #' from the UK Biobank where we performed a GWAS of body mass index (BMI), body fat percentage (BFP),
-#'cholesterol, and triglycerides. Note that BFP, cholesterol and triglycerides
+#' cholesterol, and triglycerides. Note that BFP, cholesterol and triglycerides
 #' are conditioning traits and were calculated using a separate set of individuals
 #' than BMI. See manuscript for details.
 #'
