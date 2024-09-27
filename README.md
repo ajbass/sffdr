@@ -30,7 +30,9 @@ provide type I error rate control.
 See our manuscript for additional details:
 
 > Bass AJ, Wallace C. Exploiting pleiotropy to enhance variant discovery
-> with functional false discovery rates. *Submitted*; 2024.
+> with functional false discovery rates.
+> [medRxiv](https://www.medrxiv.org/content/10.1101/2024.09.24.24314276v1);
+> 2024.
 
 Note that this work is an extension of the functional FDR methodology
 and the software builds on some of the functions in the original `fFDR`
