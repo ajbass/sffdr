@@ -4,8 +4,8 @@
 <!-- badges: start -->
 
 [![R-CMD-check](https://github.com/ajbass/sffdr/actions/workflows/R-CMD-check.yml/badge.svg)](https://github.com/ajbass/sffdr/actions/workflows/R-CMD-check.yml)
+[![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/sffdr)](https://cran.r-project.org/package=sffdr)
 
-<!---[![CRAN_Status_Badge](https://www.r-pkg.org/badges/version/sffdr)](https://cran.r-project.org/package=lit)--->
 <!-- badges: end -->
 
 ## Overview
@@ -45,6 +45,13 @@ To report any bugs or issues related to usage please report it on GitHub
 at <https://github.com/ajbass/sffdr>.
 
 ## Installation
+
+This software is implemented in the R statistical programming language. To install the release version, type the following in the R terminal:
+
+``` r
+# release version
+install.packages("sffdr")
+```
 
 To install the development version of the package:
 
