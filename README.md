@@ -62,6 +62,19 @@ library("devtools")
 devtools::install_github("ajbass/sffdr")
 ```
 
+Note that you need to install the `qvalue` package from Bioconductor or GitHub:
+
+```{r}
+# release version
+if (!require("BiocManager", quietly = TRUE))
+    install.packages("BiocManager")
+
+BiocManager::install("qvalue")
+
+# development version
+devtools::install_github("jdstorey/qvalue")
+```
+
 ## Quick start
 
 Load the `sffdr` package and example data set:
