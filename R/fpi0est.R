@@ -150,7 +150,7 @@ fpi0est <- function(
 
   # Fit models across all lambda values
   fpi0_models <- data.frame(lambda = lambda)
-  fpi0_models$fpi0 <- lapply(lambda, fit_pi0_at_lambda)
+  fpi0_models$fpi0 <- .lapply_pb(lambda, fit_pi0_at_lambda, verbose = verbose)
 
   # # Extract fitted pi0 values for all lambda
   fpi0_matrix <- sapply(seq_along(lambda), function(i) {
@@ -449,4 +449,32 @@ get_predict <- function(object, newdata, na.action = na.pass, ...) {
     predictor <- napredict(na.act, predictor)
   }
   predictor
+}
+
+
+#' @noRd
+.lapply_pb <- function(X, FUN, verbose = TRUE, pb_width = 47, ...) {
+  if (!verbose || length(X) == 0) {
+    return(lapply(X, FUN, ...))
+  }
+
+  pb <- txtProgressBar(min = 0, max = length(X), style = 3, width = pb_width)
+
+  # Safety: If code crashes, this runs to close the bar (printing \n) so the console doesn't break
+  on.exit(close(pb))
+
+  result <- vector("list", length(X))
+  for (i in seq_along(X)) {
+    result[[i]] <- FUN(X[[i]], ...)
+    setTxtProgressBar(pb, i)
+  }
+
+  # Success!
+  on.exit() # 1. Cancel the safety hook
+
+  # 2. DO NOT call close(pb). It forces a newline.
+  # 3. Manually overwrite the line with spaces
+  cat("\r", strrep(" ", pb_width + 10), "\r", sep = "")
+
+  result
 }
