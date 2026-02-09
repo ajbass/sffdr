@@ -60,6 +60,7 @@
 #'   quantile na.pass optimize binomial dbinom formula fitted fitted.values
 #'   gaussian median model.frame model.offset model.weights napredict
 #'   delete.response terms .checkMFClasses .getXlevels dlogis plogis
+#' @importFrom utils txtProgressBar setTxtProgressBar
 #' @export
 fpi0est <- function(
   p,
