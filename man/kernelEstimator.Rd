@@ -2,53 +2,124 @@
 % Please edit documentation in R/kernelEstimator.R
 \name{kernelEstimator}
 \alias{kernelEstimator}
-\title{Estimate a density on the unit interval or unit square via
-local regression}
+\title{Kernel Density Estimation for GWAS P-values}
 \usage{
 kernelEstimator(
   x,
-  transformation = "probit",
   eval.points = x,
-  subsample = 1e+07,
   epsilon = 1e-15,
-  epsilon.max = 0.999,
-  maxk = 10000,
-  trim = 1e-15,
+  epsilon.max = 1 - 1e-04,
+  maxk = 5e+05,
+  maxit = 200,
+  target_null = 1e+05,
+  trim = 0,
   nn = NULL,
+  tail_threshold = -2,
   ...
 )
 }
 \arguments{
-\item{x}{Either a vector or a 2-column matrix}
+\item{x}{Numeric vector of p-values (for 1D density) or a 2-column matrix where
+the first column contains p-values and the second column contains an informative
+covariate/surrogate. All p-values must be in (0, 1) and the covariate/surrogate must
+be rank-transformed to be (0,1].}
 
-\item{transformation}{Either probit (default), complementary log-log, or
-identity (not recommended)}
+\item{eval.points}{Points at which to evaluate the density estimate. Defaults to
+\code{x}. For custom evaluation points, must match the dimensionality of \code{x}
+(vector or 2-column matrix).}
 
-\item{eval.points}{Points at which to evaluate the estimate, default x}
+\item{epsilon}{Lower bound for p-values to prevent numerical issues. P-values
+below this are clamped to \code{epsilon}. Default: \code{1e-15}.}
 
-\item{subsample}{Number of points that are randomly subsampled for
-computing the fit; useful for computational efficiency and for ensuring
-the density estimation does not run out of memory. NULL means no the
-fit is performed on all points}
+\item{epsilon.max}{Upper bound for p-values. P-values above this are clamped to
+\code{epsilon.max}. Default: \code{1 - 1e-4}.}
 
-\item{epsilon}{How close values are allowed to come to 0}
+\item{maxk}{Maximum number of fitting points passed to \code{\link[locfit]{locfit}}.
+Increase for very large datasets. Default: \code{500000}.}
 
-\item{epsilon.max}{How close values are allowed to come to 1}
+\item{maxit}{Maximum number of iterations for local regression fitting. Default:
+\code{2000}.}
 
-\item{maxk}{maxk argument passed to locfit}
+\item{target_null}{Maximum number of null SNPs to include in the weighted fit
+(bivariate case only). SNPs in the signal-enriched tail (defined by
+\code{tail_threshold}) are always retained; null SNPs are downsampled to this
+target and upweighted accordingly. Default: \code{100000}.}
 
-\item{trim}{In one-dimensional fitting, the very edges often have high
-variance. This parameter fixes the estimate on the intervals
-(0, trim) and (1 - trim, 1).}
+\item{trim}{For 1D estimation, fixes the density estimate to constant values on
+the intervals \code{(0, trim)} and \code{(1 - trim, 1)} to reduce boundary
+variance. Default: \code{0} (no trimming).}
 
-\item{nn}{nearest neighbor parameter}
+\item{nn}{Nearest-neighbor bandwidth parameter for \code{\link[locfit]{locfit}},
+expressed as a fraction of the data. If \code{NULL} (default), automatically
+determined based on effective sample size to span approximately 5000 neighbors
+(which corresponds to multiple LD blocks in GWAS). Larger values increase smoothing.}
 
-\item{...}{additional arguments to be passed to lp in locfit, used only
-if cv=FALSE}
+\item{tail_threshold}{Z-score threshold on the probit-transformed covariate scale
+(bivariate case only). SNPs with z < \code{tail_threshold} are treated as
+signal-enriched and prioritized in the adaptive fit. Default: \code{-2}
+(approximately 2.3\% of standard normal distribution).}
+
+\item{...}{Additional arguments passed to \code{\link[locfit]{lp}} for controlling
+local polynomial fitting (e.g., \code{deg}, \code{kern}).}
+}
+\value{
+A data frame with columns:
+  \describe{
+    \item{x}{Evaluation points (original scale).}
+    \item{fx}{Estimated density at evaluation points (original scale).}
+    \item{s}{Evaluation points on probit scale (\code{qnorm(x)}).}
+    \item{fs}{Estimated density on probit scale.}
+  }
+  The returned object has an attribute \code{"lfit"} containing the fitted
+  \code{locfit} object for diagnostics.
 }
 \description{
-This function is adapted from the fFDR package.
+Performs kernel density estimation on p-values (univariate) or joint
+p-value/covariate pairs (bivariate) using local regression on the probit scale.
+The estimator is optimized for GWAS data with linkage disequilibrium (LD) and
+uses adaptive downsampling to prioritize signal-rich regions while maintaining
+computational efficiency.
 }
 \details{
-Provide density estimates that are needed by \code{sffdr}
+The function implements a multi-stage density estimation procedure:
+
+\enumerate{
+  \item \strong{Probit transformation}: P-values are transformed to the normal
+    scale via \code{qnorm} to stabilize variance and handle extreme values.
+
+  \item \strong{Adaptive downsampling (bivariate only)}: To handle large GWAS
+    datasets efficiently, the null region (where the covariate suggests low signal)
+    is downsampled to \code{target_null} SNPs, with inverse-probability weighting
+    to preserve the density. Signal-enriched SNPs (tail) are always retained.
+
+  \item \strong{Cascade fitting}: Multiple fitting strategies are attempted in
+    sequence, with decreasing resolution and increasing robustness, until a
+    valid fit is obtained.
+
+  \item \strong{Jacobian correction}: Density estimates are transformed back to
+    the original p-value scale using the Jacobian of the probit transformation.
+}
+
+The nearest-neighbor bandwidth \code{nn} controls smoothing and LD robustness.
+By targeting ~5000 neighbors (default), the estimator naturally averages over
+multiple LD blocks (~30-50 blocks in European ancestry populations), reducing
+spurious local structure while preserving true signal-covariate relationships.
+}
+\examples{
+\dontrun{
+# 1D density estimation
+p <- runif(10000, 0, 1)
+dens <- kernelEstimator(p)
+plot(dens$x, dens$fx, type = "l")
+
+# 2D density with informative covariate
+p <- runif(10000, 0, 1)
+z <- runif(10000)  # rank-norm transformed covariate
+x_mat <- cbind(p, z)
+dens <- kernelEstimator(x_mat)
+}
+
+}
+\seealso{
+\code{\link[locfit]{locfit}}, \code{\link{sffdr}}
 }

@@ -24,22 +24,19 @@ Graphical display of the sffdr object
 # import data
 data(bmi)
 
-# separate main p-values and conditioning p-values
+# Separate main p-values and conditioning p-values
 p <- sumstats$bmi
 z <- as.matrix(sumstats[, -1])
 
-# apply pi0_model to create model
-knots <- c(0.005, 0.01, 0.025, 0.05, 0.1)
-fmod <- pi0_model(z, knots = knots)
+# Apply pi0_model to create model
+fmod <- pi0_model(z)
 
-# estimate functional pi0
+# Estimate functional pi0
 fpi0_out <- fpi0est(p, z = fmod$zt, pi0_model = fmod$fmod)
 fpi0 <- fpi0_out$fpi0
 
-# apply sffdr
-# Note all tests are independent see 'indep_snps' argument
-# The very small p-values, set epsilon to min of p
-sffdr_out <- sffdr(p, fpi0, epsilon = min(p))
+# Apply sffdr
+sffdr_out <- sffdr(p, fpi0)
 
 # Plot significance results
 plot(sffdr_out, rng = c(0, 5e-4))

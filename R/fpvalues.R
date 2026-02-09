@@ -1,54 +1,98 @@
-fpvalues_raw <- function(lfdr) {
-  p_out <- rep(NA, length(lfdr))
+.fpvalues_raw <- function(lfdr) {
+  n <- length(lfdr)
+  p_out <- rep(NA_real_, n)
+  fdr_out <- rep(NA_real_, n)
+
   rm_na <- !is.na(lfdr)
+  if (!any(rm_na)) {
+    return(list(fp = p_out, fq = fdr_out))
+  }
 
-  lfdr <- lfdr[rm_na]
-  lfdr[lfdr > 1] <- 1
-  r <- rank(lfdr)
+  lfdr_clean <- lfdr[rm_na]
+  lfdr_clean[lfdr_clean > 1] <- 1
 
-  emp_cdf <- ecdf(r / length(r))
+  o <- order(lfdr_clean)
+  lfdr_sorted <- lfdr_clean[o]
 
-  # correct ordering and calculate q-values
-  out <- sort(lfdr, index.return = TRUE)
-  out$x[out$x > 1] <- 1
-  fdr <- cumsum(out$x) / (1:length(lfdr))
-  fdr <- fdr[order(out$ix)]
-  p_out[rm_na] <- pmin((fdr * emp_cdf(r / length(r))) / max(fdr), 1)
-  return(list(fp = p_out,
-              fq = fdr))
+  # Calculate cumulative mean (FDR)
+  fdr_sorted <- cumsum(lfdr_sorted) / seq_along(lfdr_sorted)
+
+  # Rank proportion
+  rank_prop <- seq_along(lfdr_sorted) / length(lfdr_sorted)
+
+  # P-value calculation
+  p_sorted <- (fdr_sorted * rank_prop) / max(fdr_sorted)
+  p_sorted <- pmin(p_sorted, 1)
+
+  p_final <- numeric(length(lfdr_clean))
+  fdr_final <- numeric(length(lfdr_clean))
+
+  p_final[o] <- p_sorted
+  fdr_final[o] <- fdr_sorted
+
+  p_out[rm_na] <- p_final
+  fdr_out[rm_na] <- fdr_final
+
+  return(list(fp = p_out, fq = fdr_out))
 }
 
 #' @title
 #' Functional p-values
 #'
 #' @description
-#' Calculate functional p-values from functional local FDRs. Internal use.
+#' Calculate functional p-values from functional local FDRs.
 #'
-#' @param lfdr A vector of functional local FDRs of a region
-#' @param p A vector of p-values. Default is NULL.
+#' @param lfdr A vector of functional local FDRs.
+#' @param p A vector of p-values for ranking purposes. Default is NULL.
 #'
 #' @return
-#' A list of object type "sffdr" containing:
+#' A list containing:
 #' \item{fp}{Functional p-values.}
 #' \item{fq}{Functional q-values.}
-#'
 #' @export
 fpvalues <- function(lfdr, p = NULL) {
-  if (is.null(p)) return(fpvalues_raw(lfdr)) # ignore order of p
-  p_out <- fdr_out <- rep(NA, length(p))
-  rm_na <- !is.na(p)
-  p <- p[rm_na]
-  lfdr <- lfdr[rm_na]
-  lfdr[lfdr > 1] <- 1
+  if (!is.numeric(lfdr)) {
+    stop("'lfdr' must be a numeric vector.")
+  }
+  if (is.null(p)) {
+    out <- .fpvalues_raw(lfdr)
+    return(out)
+  }
 
-  o = order(lfdr, p)
-  r <- order(o)
-  emp_cdf <- ecdf(r / length(r))
+  if (length(lfdr) != length(p)) {
+    stop("Length of 'lfdr' and 'p' must match.")
+  }
 
-  # correct ordering and calculate q-values
-  fdr <- (cumsum(lfdr[o]) / (1:length(lfdr)))[r]
-  fdr_out[rm_na] <- fdr
-  p_out[rm_na] <-  pmin((fdr * emp_cdf(r / length(r))) / max(fdr), 1)
-  return(list(fp = p_out,
-         fq = fdr_out))
+  n <- length(p)
+  p_out <- rep(NA_real_, n)
+  fdr_out <- rep(NA_real_, n)
+
+  rm_na <- !is.na(p) & !is.na(lfdr)
+  if (sum(rm_na) == 0) {
+    out <- list(fp = p_out, fq = fdr_out)
+    return(out)
+  }
+
+  p_sub <- p[rm_na]
+  lfdr_sub <- lfdr[rm_na]
+  lfdr_sub[lfdr_sub > 1] <- 1
+
+  o <- order(lfdr_sub, p_sub)
+
+  r <- integer(length(o))
+  r[o] <- seq_along(o)
+
+  # Calculate FDR on sorted data
+  fdr_sorted <- cumsum(lfdr_sub[o]) / seq_along(o)
+  fdr_out[rm_na] <- fdr_sorted[r]
+
+  valid_fdr <- fdr_out[rm_na]
+  max_fdr <- max(valid_fdr)
+  n_sub <- length(r)
+
+  p_calculated <- (valid_fdr * (r / n_sub)) / max_fdr
+  p_out[rm_na] <- pmin(p_calculated, 1)
+
+  out <- list(fp = p_out, fq = fdr_out)
+  return(out)
 }

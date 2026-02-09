@@ -1,7 +1,7 @@
 Package: sffdr
 Type: Package
 Title: Surrogate Functional False Discovery Rates for Genome-Wide Association Studies
-Version: 1.0.0
+Version: 1.1.0
 Authors@R: c(person("Andrew", "Bass", email ="ab3105@cam.ac.uk", role = c("aut", "cre")),
              person("Chris", "Wallace", email ="chris.wallace@cam.ac.uk", role = c("aut")))
 Maintainer: Andrew Bass <ab3105@cam.ac.uk>
@@ -11,21 +11,17 @@ License: LGPL
 Encoding: UTF-8
 VignetteBuilder: knitr
 LazyData: true
-Depends: R (>= 3.4.0)
+Depends: R (>= 4.1.0)
 Imports: 
-    locfit,
-    splines,
-    dplyr,
+    locfit, 
+    splines, 
     ggplot2 (>= 3.5.1),
     patchwork (>= 1.3.0),
-    gam,
     qvalue,
-    tibble,
-    tidyr,
-    Rcpp
+    fastglm, 
+    withr
 Suggests: 
     testthat (>= 3.0.0),
     knitr,
     rmarkdown
-LinkingTo: Rcpp
-RoxygenNote: 7.3.1
+RoxygenNote: 7.3.3

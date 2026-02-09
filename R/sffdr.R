@@ -1,162 +1,237 @@
-#' @title
-#' Estimate the functional p-values, q-values, and local false discovery rates given a set of p-values and
-#' informative variables
+#' Surrogate Functional False Discovery Rate Analysis
 #'
 #' @description
-#' Estimate the functional p-values, q-values, and local false discovery rates given a set of p-values and informative
-#' variables. The functional p-values is mapping from the functional q-value (FDR-based measure) to a p-value for type I error rate control.
+#' Estimate functional p-values, q-values, and local false discovery rates (lfdr)
+#' for GWAS data leveraging summary statistics from related traits. Functional p-values map from the
+#' functional q-value (FDR-based measure) to a p-value for type I error rate control,
+#' accounting for pleiotropy that impacts the prior probability of
+#' association.
 #'
 #' @details
-#' The function \code{\link{fpi0est}} should be called externally to estimate the
-#' functional proportion of null tests given the set of informative variables.
-#' The surrogate functional FDR methodology builds from the functional FDR
-#' methodology and implements some of the functions from the package.
+#' The surrogate functional FDR (sfFDR) methodology extends the functional FDR
+#' framework to leverage multiple informative variables (e.g., functional annotations,
+#' GWAS summary statistics) for increased power while controlling
+#' false discovery rates.
 #'
-#' @param p.value A vector of p-values.
-#' @param fpi0 An estimate of the function proportion of null tests using the \code{\link{fpi0est}} function.
-#' @param surrogate A surrogate variable that compresses more than one informative variables.
-#' Default is NULL. If \code{fpi0} is specified and \code{surrogate} is NULL then \code{fpi0} is used as the surrogate variable.
-#' @param indep_snps A boolean vector (same size as p) specifying the set of independent tests. Default is NULL and all tests are treated independently.
-#' @param monotone.window Enforce monotonicity at specified step size. Default is NULL.
-#' @param epsilon A numerical value the truncation for the p-values during density estimation. Default is 1e-15. You may want to consider decreasing this value if there are a substantial number of small p-values.
-#' @param nn A numerical value specifying the nearest neighbor parameter in \code{\link{kernelEstimator}}. Default is NULL.
-#' @param fp_ties A boolean specifying whether ties should be broken using the ordering of the p-values when calculating the fp-values. Only impacts the tests when the local FDR is tied. Default is TRUE.
-#' @param \ldots Additional arguments passed to \code{\link{kernelEstimator}}.
+#' **Workflow:**
+#' 1. Estimate functional pi0 (proportion of nulls) using \code{\link{fpi0est}}
+#' 2. Call \code{sffdr()} with p-values and estimated functional pi0
+#' 3. Use returned functional p-values/q-values/local FDRs for significance testing
 #'
+#' **Surrogate Variable:**
+#' If not specified, the estimated functional pi0 is used as the surrogate variable.
+#'
+#' @param p.value Numeric vector of p-values to analyze.
+#' @param fpi0 Numeric vector of functional pi0 estimates, obtained
+#'   from \code{\link{fpi0est}}. Values must be in [0, 1].
+#' @param surrogate Optional numeric vector (same length as \code{p.value}) used
+#'   as a surrogate variable for compression. If NULL (default), uses
+#'   \code{fpi0} as the surrogate.
+#' @param epsilon Numeric; lower bound for p-value clamping during density estimation.
+#'   Default is \code{.Machine$double.xmin}.
+#' @param nn Numeric; nearest-neighbor bandwidth for \code{\link{kernelEstimator}}.
+#'   If NULL (default), automatically selected as ~5000 neighbors.
+#' @param fp_ties Logical; whether to break ties in functional p-values using the
+#'   original p-value ordering. Default is TRUE.
+#' @param seed Integer; random seed for reproducibility of rank tie-breaking.
+#'   Default is 2026.
+#' @param verbose Logical; print progress messages. Default is TRUE.
+#' @param ... Additional arguments passed to \code{\link{kernelEstimator}}.
 #'
 #' @return
-#' A list of object type "sffdr" containing:
-#' \item{pvalues}{A vector of the original p-values.}
-#' \item{fpvalues}{A vector of the estimated functional p-values.}
-#' \item{fqvalues}{A vector of the estimated functional q-values.}
-#' \item{flfdr}{A vector of the estimated functional local FDR values.}
-#' \item{pi0}{An vector of the original functional proportion of null tests.}
-#' \item{density}{An object containing the kernel density estimates from \code{kernelEstimator}.}
+#' An S3 object of class \code{"sffdr"} containing:
+#' \item{call}{The function call.}
+#' \item{pvalues}{Original p-values.}
+#' \item{fpvalues}{Functional p-values.}
+#' \item{fqvalues}{Functional q-values.}
+#' \item{flfdr}{Functional local false discovery rates.}
+#' \item{fpi0}{Functional pi0 estimates.}
+#' \item{fx}{Joint density estimates at observed (p-value, surrogate) pairs.}
 #'
 #' @examples
-#' # import data
+#' # Import data
 #' data(bmi)
 #'
-#' # separate main p-values and conditioning p-values
+#' # Separate main p-values and conditioning p-values
 #' p <- sumstats$bmi
 #' z <- as.matrix(sumstats[, -1])
 #'
-#' # apply pi0_model to create model
-#' knots <- c(0.005, 0.01, 0.025, 0.05, 0.1)
-#' fmod <- pi0_model(z, knots = knots)
+#' # Apply pi0_model to create model
+#' # (note: use indep_snps argument to specify independent SNPs for training)
+#' fmod <- pi0_model(z)
 #'
-#' # estimate functional pi0
+#' # Estimate functional pi0
+#' # (note: use indep_snps argument to specify independent SNPs for training)
 #' fpi0_out <- fpi0est(p, z = fmod$zt, pi0_model = fmod$fmod)
 #' fpi0 <- fpi0_out$fpi0
 #'
-#' # apply sffdr
-#' # Note all tests are independent see 'indep_snps' argument
-#' # The data has very small p-values, set epsilon to min of p
-#' sffdr_out <- sffdr(p, fpi0, epsilon = min(p))
+#' # Apply sffdr
+#' sffdr_out <- sffdr(p, fpi0)
 #'
 #' # Plot significance results
-#' plot(sffdr_out, rng = c(0, 5e-4))
+#' plot(sffdr_out)
 #'
-#' # Functional P-values, Q-values, and local FDR
+#' # Extract functional quantities
 #' fp <- sffdr_out$fpvalues
 #' fq <- sffdr_out$fqvalues
 #' flfdr <- sffdr_out$flfdr
 #'
 #' @author Andrew J. Bass
-#' @seealso \code{\link{fpi0est}}, \code{\link{plot.sffdr}}
+#' @seealso \code{\link{fpi0est}}, \code{\link{plot.sffdr}}, \code{\link{kernelEstimator}}
 #' @keywords sffdr
 #' @aliases sffdr
-#' @import Rcpp
 #' @export
-sffdr <- function(p.value,
-                  fpi0,
-                  surrogate = NULL,
-                  indep_snps = NULL,
-                  monotone.window = NULL,
-                  epsilon = 1e-15,
-                  nn = NULL,
-                  fp_ties = TRUE, ...) {
+sffdr <- function(
+  p.value,
+  fpi0,
+  surrogate = NULL,
+  epsilon = .Machine$double.xmin,
+  nn = NULL,
+  fp_ties = TRUE,
+  seed = 2026,
+  verbose = TRUE,
+  ...
+) {
+  if (verbose) {
+    message("==================================================")
+    message(sprintf(
+      "Running sfFDR Analysis (v%s)",
+      utils::packageVersion("sffdr")
+    ))
+    message("==================================================")
+  }
 
-  if (is.null(indep_snps)) {
-    indep_snps <- rep(TRUE, length(p.value))
-    indep.check <- NULL
+  # Set random seed for reproducibility
+  if (!is.null(seed)) {
+    withr::local_seed(seed)
+  }
+
+  # Input validation
+  n <- length(p.value)
+
+  if (!is.numeric(p.value)) {
+    stop("'p.value' must be a numeric vector.")
+  }
+
+  if (!is.numeric(fpi0)) {
+    stop("'fpi0' must be a numeric vector.")
+  }
+
+  if (length(fpi0) != n) {
+    stop("Length of 'fpi0' must match 'p.value'.")
+  }
+
+  if (!is.null(surrogate) && length(surrogate) != n) {
+    stop("Length of 'surrogate' must match 'p.value'.")
+  }
+
+  if (any(p.value <= 0, na.rm = TRUE)) {
+    warning("Found p-values <= 0. Clamping to machine epsilon.")
+    p.value <- pmax(p.value, .Machine$double.xmin, na.rm = FALSE)
+  }
+
+  if (any(p.value > 1, na.rm = TRUE)) {
+    stop("Found p-values > 1.")
+  }
+
+  if (any(fpi0 < 0 | fpi0 > 1, na.rm = TRUE)) {
+    stop("'fpi0' values must be in [0, 1].")
+  }
+
+  # Handle NAs: identify valid indices, compute on valid subset, map back
+  valid <- !is.na(p.value) & !is.na(fpi0)
+  if (!is.null(surrogate)) {
+    valid <- valid & !is.na(surrogate)
+  }
+
+  if (!any(valid)) {
+    stop("No non-NA observations.")
+  }
+
+  # Work on valid subset
+  p_valid <- p.value[valid]
+  fpi0_valid <- fpi0[valid]
+  n_valid <- sum(valid)
+
+  # Set surrogate variable
+  if (verbose) {
+    message("  Transforming surrogate variable...")
+  }
+
+  surrogate_var <- if (is.null(surrogate)) fpi0_valid else surrogate[valid]
+
+  # Rank-transform surrogate to percentile scale
+  z <- rank(surrogate_var, ties.method = "random") / n_valid
+
+  # Fit joint density
+  if (verbose) {
+    message("  Fitting kernel density...")
+  }
+
+  kd <- kernelEstimator(
+    x = cbind(z, p_valid),
+    eval.points = cbind(z, p_valid),
+    nn = nn,
+    epsilon = epsilon,
+    ...
+  )
+
+  fx_valid <- kd$fx
+
+  # Guard against zero or negative density
+  fx_valid <- pmax(fx_valid, .Machine$double.xmin)
+
+  # Compute functional local FDR
+  if (verbose) {
+    message("  Computing functional local FDRs...")
+  }
+
+  lfdr_valid <- pmin(fpi0_valid / fx_valid, 1)
+
+  # Compute functional p-values and q-values
+  if (verbose) {
+    message("  Computing functional p-values and q-values...")
+  }
+
+  fpq <- if (!fp_ties) {
+    fpvalues(lfdr_valid)
   } else {
-    if (length(indep_snps) != length(p.value)){
-      stop("Length of independent SNPs different than p-values")
-    } else if (sum(indep_snps) < 100) {
-      warning("Less than 100 independent SNPs. Estimation will be noisy.")
-    }
-    indep.check <- TRUE
+    fpvalues(lfdr_valid, p_valid)
   }
 
-  if (is.null(surrogate)) {
-    surrogate <- fpi0
-  }
-  # Rank transformation surrogate
-  z <- rank(surrogate, ties.method = "random") / length(surrogate)
-
-  # NN for density estimator
-  if (is.null(nn)) {
-    pi1 <- 1 - mean(fpi0)
-    nn <- min(pi1, 1 - pi1)
-    if (nn < 0.02) nn <- 0.02
+  if (verbose) {
+    message("  Done.")
+    message("==================================================")
+    message("")
   }
 
-  kd <- kernelEstimator(cbind(z[indep_snps], p.value[indep_snps]),
-                        nn = nn,
-                        eval.points = cbind(z, p.value), epsilon = epsilon, ...)
+  # Map back to full length, NAs for invalid positions
+  fpvalues_out <- rep(NA_real_, n)
+  fqvalues_out <- rep(NA_real_, n)
+  flfdr_out <- rep(NA_real_, n)
+  fx_out <- rep(NA_real_, n)
 
-  if (!is.null(monotone.window)) {
-    if (length(p.value) > 500000) {
-      warning("Enforcing monotonicity may take a few minutes.")
-    }
-    sp <- order(p.value)
-    rank.p <- rank(p.value, ties.method = "random")
-    original.fx <- kd$fx
-    fx = monoSmooth(p.value[sp],  z[sp], original.fx[sp], monotone.window)
-    fx <- fx[rank.p]
-  } else {
-    fx <- kd$fx
-  }
+  fpvalues_out[valid] <- fpq$fp
+  fqvalues_out[valid] <- fpq$fq
+  flfdr_out[valid] <- lfdr_valid
+  fx_out[valid] <- fx_valid
 
-  if (!is.null(indep.check)) {
-    # account for LD
-    kd_surrogate <- kernelEstimator(z[indep_snps],
-                                    nn = nn,
-                                    eval.points = z,
-                                    epsilon = epsilon, ...)
-    sfx <- kd_surrogate$fx
-  } else {
-    sfx <-  1
-  }
-  # Local FDR: sfx marginal density of surrogate, fx joint density
-  lfdr <- pmin(fpi0 * sfx / fx, 1)
-
-  if (!fp_ties) {
-    fpq <- fpvalues(lfdr)
-    fp <- fpq$fp
-    fq <- fpq$fq
-  } else {
-    fpq <- fpvalues(lfdr, p.value)
-    fp <- fpq$fp
-    fq <- fpq$fq
-  }
-
-  ret <- list(call = match.call(),
-              pvalues = p.value,
-              fpvalues = fp,
-              fqvalues = fq,
-              flfdr = lfdr,
-              fpi0 = fpi0,
-              density = kd)
-  class(ret) <- "sffdr"
-  ret
+  # Return results
+  structure(
+    list(
+      call = match.call(),
+      pvalues = p.value,
+      fpvalues = fpvalues_out,
+      fqvalues = fqvalues_out,
+      flfdr = flfdr_out,
+      fpi0 = fpi0,
+      fx = fx_out
+    ),
+    class = "sffdr"
+  )
 }
 
-#' @import qvalue
-#' @import locfit
-#' @import splines
-#' @import dplyr
-#' @import gam
-#' @import qvalue
+#' @importFrom qvalue qvalue pi0est
+#' @importFrom locfit locfit lp rbox
+#' @importFrom splines ns
 NULL

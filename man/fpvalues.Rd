@@ -7,15 +7,15 @@
 fpvalues(lfdr, p = NULL)
 }
 \arguments{
-\item{lfdr}{A vector of functional local FDRs of a region}
+\item{lfdr}{A vector of functional local FDRs.}
 
-\item{p}{A vector of p-values. Default is NULL.}
+\item{p}{A vector of p-values for ranking purposes. Default is NULL.}
 }
 \value{
-A list of object type "sffdr" containing:
+A list containing:
 \item{fp}{Functional p-values.}
 \item{fq}{Functional q-values.}
 }
 \description{
-Calculate functional p-values from functional local FDRs. Internal use.
+Calculate functional p-values from functional local FDRs.
 }

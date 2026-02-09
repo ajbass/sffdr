@@ -2,52 +2,45 @@
 % Please edit documentation in R/pi0_model.R
 \name{pi0_model}
 \alias{pi0_model}
-\title{Formulates the model for the proportion of null tests}
+\title{Build Model for Functional Proportion of Null Tests (fpi0)}
 \usage{
-pi0_model(z, indep_snps = NULL, basis.df = 3, knots = NULL)
+pi0_model(
+  z,
+  indep_snps = NULL,
+  fdr_threshold = 0.25,
+  min_discoveries = 2500,
+  min_snps_per_knot = 2500,
+  n_knots = 5,
+  verbose = TRUE
+)
 }
 \arguments{
-\item{z}{\code{matrix}: informative variables that impact the power of the
-p-values (rows are tests and columns are different informative variables).
-Currently, there must be no missing values.}
+\item{z}{Matrix/data.frame of p-values (rows=tests, cols=traits).}
 
-\item{indep_snps}{\code{vector} Boolean indicating the set of independent SNPs}
+\item{indep_snps}{Logical vector indicating independent SNPs (training subset).
+If NULL, uses all tests. Default: NULL.}
 
-\item{basis.df}{\code{integer}: the degrees of freedom for the natural cubic spline on each variable.
-Default is 3 at equally space intervals.}
+\item{fdr_threshold}{FDR threshold for signal definition. Default: 0.25.}
 
-\item{knots}{\code{vector}: Specify the location of the knots in natural cubic spline. Note
-that the knots are specified using quantiles by default. Default is NULL and uses basis.df at equally space intervals.}
+\item{min_discoveries}{Min significant hits required to include trait. Default: 2500.}
+
+\item{min_snps_per_knot}{Min significant SNPs per knot interval. Default: 2500.}
+
+\item{n_knots}{Target knot count. Default: 5. Automatically reduced if insufficient
+discoveries (via `min_snps_per_knot`) or capped by `max_knots`.}
+
+\item{verbose}{Print selection details. Default: TRUE.}
 }
 \value{
-A list with the following entries:
-\enumerate{
- \item fmod: model formula
- \item zt: matrix of rank-transformed informative variables
- }
+List containing:
+\item{fmod}{Model formula (using \code{splines::ns})}
+\item{zt}{Data frame of globally rank-transformed p-values}
 }
 \description{
-\code{pi0_model} helps generate the model for the proportion of truly null tests.
- For more details, refer to the vignette.
+Generates a natural spline model for the functional proportion of null tests (fpi0) by
+adaptively selecting knots based on an FDR threshold.
 }
 \details{
-We note that this function is specifically designed for informative p-values and other
-complex models should be created outside this function.
+Independent SNPs determine knot placement; all SNPs train the model to capture signal shape.
+For smaller datasets (<100K), consider reducing `min_snps_per_knot` and `min_discoveries` to improve knot placement.
 }
-\examples{
-data(bmi)
-
-p <- sumstats$bmi
-z <- as.matrix(sumstats[, -1])
-
-# For p-values, you want to specify the lower quantiles
-fmod <- pi0_model(z, knots = c(0.005, 0.01, 0.025, 0.05, 0.1))
-
-}
-\seealso{
-\code{\link{sffdr}}
-}
-\author{
-Andrew Bass
-}
-\keyword{pi0_model}
