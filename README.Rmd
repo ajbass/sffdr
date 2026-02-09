@@ -83,7 +83,7 @@ fpi0 <- fpi0est(p = p,
                 pi0_model = mpi0$fmod)
 ```
 
-  **Note on Knots**: Ideally, knots should cover the distribution of non-null p-values in your informative studies. Our algorithm uses an FDR threshold to choose the location of the knots and the number of knots. Depending on the study, you may want to changes these values (see `?pi0_model`).
+  **Note on Knots**: Ideally, knots should cover the distribution of non-null p-values in your informative studies. Our algorithm uses an FDR threshold to choose the location of the knots and the number of knots. Depending on the study, you may want to changes these values (see `?pi0_model`). Note that this toy example contains only 10,000 p-values, so the knot locations are not optimal since the function was designed for GWAS-scale data. 
 
 ### 2. Estimating the functional significance quantities
 
