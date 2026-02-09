@@ -87,7 +87,7 @@ fpi0 <- fpi0est(p = p,
 
 ### 2. Estimating the functional significance quantities
 
-With the functional π0​ estimated, we can now calculate the FDR quantities and functional p-values.
+With the functional $\pi_{0}$​ estimated, we can now calculate the FDR quantities and functional p-values.
 ```{r}
 # Apply sfFDR
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)   

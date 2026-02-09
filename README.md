@@ -97,7 +97,7 @@ Depending on the study, you may want to changes these values (see
 
 ### 2. Estimating the functional significance quantities
 
-With the functional π0​ estimated, we can now calculate the FDR
+With the functional $\pi_{0}$ estimated, we can now calculate the FDR
 quantities and functional p-values.
 
 ``` r
