@@ -148,7 +148,7 @@ latter is likely better when the primary study has low power.
 
 ### Manual Knot Selection and using other informative variables
 
-The selection of knots in the B-spline basis is and important tuning
+The selection of knots in the B-spline basis is an important tuning
 parameter in sffdr. If your surrogate GWAS has extremely high power
 (very small p-values), we recommend placing more knots at the lower end
 of the p-value distribution to capture the local density of signals.
