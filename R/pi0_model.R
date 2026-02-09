@@ -141,7 +141,7 @@ pi0_model <- function(
         }
 
         # Calculate max knots based on TOTAL signal (n_sig)
-        max_safe_knots <- floor(n_sig / min_snps_per_knot)
+        max_safe_knots <- floor(length(basis_ranks) / min_snps_per_knot)
         n_knots_actual <- max(1, min(max_safe_knots, n_knots))
 
         probs <- seq(0, 1, length.out = n_knots_actual + 1)
