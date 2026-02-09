@@ -9,7 +9,7 @@ pi0_model(
   indep_snps = NULL,
   fdr_threshold = 0.25,
   min_discoveries = 2500,
-  min_snps_per_knot = 2500,
+  min_snps_per_knot = 100,
   n_knots = 5,
   verbose = TRUE
 )
@@ -24,7 +24,7 @@ If NULL, uses all tests. Default: NULL.}
 
 \item{min_discoveries}{Min significant hits required to include trait. Default: 2500.}
 
-\item{min_snps_per_knot}{Min significant SNPs per knot interval. Default: 2500.}
+\item{min_snps_per_knot}{Min significant SNPs per knot interval. Default: 100. Note that this is the minimum independent SNPs required per knot interval if `indep_snps` is provided.}
 
 \item{n_knots}{Target knot count. Default: 5. Automatically reduced if insufficient
 discoveries (via `min_snps_per_knot`) or capped by `max_knots`.}
