@@ -174,7 +174,7 @@ pi0_model <- function(
 
       indep_ranks_subset <- rank_vals[is_indep_subset]
       # minimum # of independent SNPs required in each knot interval
-      min_indep_support <- 15
+      min_indep_support <- 50
 
       repeat {
         if (length(knot_locs) == 0) {
