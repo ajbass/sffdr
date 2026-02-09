@@ -106,7 +106,7 @@ plot(sffdr_out)
 
 ### 3. Incorporating linkage disequilibrium (LD)
 
-In standard GWAS, SNPs are often correlated due to LD. To account for this, you should provide a logical vector indicating which SNPs are LD-independent (e.g., via pruning). `sffdr` uses these independent SNPs to fit the model, then computes the significance quantities for the entire dataset.
+In standard GWAS, SNPs are often correlated due to LD. To account for this, you should provide a logical indicating which SNPs are LD-independent (e.g., via pruning). `sffdr` uses these independent SNPs to fit the model, then computes the significance quantities for the entire dataset.
 
 ```{r}
 # logical vector: TRUE if SNP is LD-independent
