@@ -11,7 +11,7 @@
 #' @param min_discoveries Min significant hits required to include trait. Default: 2500.
 #' @param n_knots Target knot count. Default: 5. Automatically reduced if insufficient
 #'   discoveries (via `min_snps_per_knot`) or capped by `max_knots`.
-#' @param min_snps_per_knot Min significant SNPs per knot interval. Default: 2500.
+#' @param min_snps_per_knot Min significant SNPs per knot interval. Default: 100. Note that this is the minimum independent SNPs required per knot interval if `indep_snps` is provided.
 #' @param verbose Print selection details. Default: TRUE.
 #'
 #' @details
@@ -28,7 +28,7 @@ pi0_model <- function(
   indep_snps = NULL,
   fdr_threshold = 0.25,
   min_discoveries = 2500,
-  min_snps_per_knot = 2500,
+  min_snps_per_knot = 100,
   n_knots = 5,
   verbose = TRUE
 ) {
@@ -66,14 +66,11 @@ pi0_model <- function(
   }
   n_total_snps <- nrow(z)
 
-  # Default bandwidth safety
-  dynamic_min_snps <- min_snps_per_knot
-
   if (verbose) {
     message(sprintf(
-      "  [Auto-Scale]: N = %d. Bandwidth set to %d SNPs per knot.",
+      "  [Auto-Scale]: N = %d. Bandwidth set to %d independent SNPs per knot.",
       n_total_snps,
-      dynamic_min_snps
+      min_snps_per_knot
     ))
   }
 
