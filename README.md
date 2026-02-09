@@ -57,10 +57,7 @@ devtools::install_github("ajbass/sffdr")
 
 ## Quick start guide
 
-To demonstrate the package, we will use a sample dataset containing
-10,000 SNPs for Body Mass Index (BMI) as the primary trait of interest,
-with Body Fat Percentage (BFP), cholesterol, and triglycerides as
-informative traits.
+To demonstrate the package, we will use a sample dataset containing 10,000 SNPs for body mass index (BMI) as the primary trait of interest, with body fat percentage (BFP), cholesterol, and triglycerides as informative traits.
 
 ``` r
 library(sffdr)
