@@ -7,41 +7,43 @@
 #'
 #' @details
 #' **Algorithm:**
-#' 1. For each lambda threshold, fit a binomial GLM: P(p >= lambda | z)
-#' 2. Use constrained binomial family to ensure predictions in (0, 1)
-#' 3. Select optimal lambda via MISE
+#' \enumerate{
+#'   \item For each lambda threshold, fit a binomial GLM: \eqn{P(p \ge \lambda | z)}
+#'   \item Use constrained binomial family to ensure predictions in (0, 1)
+#'   \item Select optimal lambda via MISE minimization
+#' }
 #'
-#' **Model Fitting:**
-#' Uses \code{\link[fastglm]{fastglm}} for efficient GLM fitting with a
-#' constrained binomial family that bounds predictions away from 0 and 1.
+#' **Usage Patterns:**
+#'
+#' \strong{Pattern 1 (Recommended):} Use output from \code{\link{pi0_model}}
+#' \preformatted{
+#'   mpi0 <- pi0_model(z)
+#'   # Clean syntax:
+#'   fpi0_out <- fpi0est(p, mpi0)
+#' }
+#'
+#' \strong{Pattern 2:} Manually specify formula and covariates
+#' \preformatted{
+#'   fpi0_out <- fpi0est(p, z = z_matrix, pi0_model = formula_obj)
+#' }
 #'
 #' @param p Numeric vector of p-values.
-#' @param pi0_model_obj A list object returned by \code{\link{pi0_model}}. This list must
-#'   contain two elements: \code{fmod} (the formula) and \code{zt} (the rank-transformed
-#'   covariate matrix). If provided, \code{z} and \code{pi0_model} are extracted from this
-#'   object automatically, unless overridden by manual arguments.
-#' @param z Data frame of covariates (output from \code{\link{pi0_model}$zt}).
-#' @param lambda Numeric vector of lambda thresholds for estimating pi0.
-#'   Default is \code{seq(0.05, 0.95, 0.05)}.
-#' @param pi0_model Formula for the pi0 model (output from \code{\link{pi0_model}$fmod}).
+#' @param pi0_model_obj Optional list object returned by \code{\link{pi0_model}}.
+#'   Must contain \code{fmod} (formula) and \code{zt} (rank-transformed covariates).
+#'   If provided, \code{z} and \code{pi0_model} are extracted automatically.
+#'   Default is NULL.
+#' @param z Optional data frame or matrix of rank-transformed covariates.
+#'   Required if \code{pi0_model_obj} is not provided. Default is NULL.
+#' @param pi0_model Optional formula (as character string or formula object).
+#'   Required if \code{pi0_model_obj} is not provided. Default is NULL.
 #' @param indep_snps Optional logical vector indicating independent SNPs for
-#'   model fitting. If NULL (default), all SNPs are used.
-#' @param constrained.p Logical; use constrained binomial family ensuring
-#'   predictions stay within (0, 1). Default is TRUE. Recommended for stability.
-#' @param tol Numeric; convergence tolerance for \code{\link[fastglm]{fastglm}}.
-#'   Default is 1e-9.
-#' @param maxit Integer; maximum iterations for \code{\link[fastglm]{fastglm}}.
-#'   Default is 200.
+#'   model fitting. Default is NULL (all SNPs used).
+#' @param lambda Numeric vector of lambda thresholds. Default is \code{seq(0.05, 0.95, 0.05)}.
+#' @param constrained.p Logical; use constrained binomial family. Default is TRUE.
+#' @param tol Numeric; convergence tolerance. Default is 1e-9.
+#' @param maxit Integer; maximum iterations. Default is 200.
 #' @param verbose Logical; print progress messages. Default is TRUE.
 #' @param ... Additional arguments passed to \code{\link[fastglm]{fastglm}}.
-#'
-#' @return A list containing:
-#' \describe{
-#'   \item{fpi0}{Numeric vector of functional pi0 estimates for each test.}
-#'   \item{tableLambda}{A data frame summarizing results for each lambda value.}
-#'   \item{MISE}{The Mean Integrated Squared Error (MISE) for the chosen model.}
-#'   \item{lambda}{The selected optimal lambda value.}
-#' }
 #'
 #' @examples
 #' # Import data
@@ -57,8 +59,17 @@
 #' # Estimate functional pi0
 #' fpi0_out <- fpi0est(p, fmod)
 #' fpi0 <- fpi0_out$fpi0
+#'
 #' # Apply sffdr
 #' sffdr_out <- sffdr(p, fpi0)
+#'
+#' @return An object of class \code{fpi0} (a list) containing:
+#' \describe{
+#'   \item{fpi0}{Numeric vector of functional pi0 estimates for each test.}
+#'   \item{tableLambda}{A data frame summarizing results for each lambda value.}
+#'   \item{MISE}{The Mean Integrated Squared Error (MISE) for the chosen model.}
+#'   \item{lambda}{The selected optimal lambda value.}
+#' }
 #'
 #' @importFrom stats family predict model.matrix qnorm dnorm runif
 #'   quantile na.pass optimize binomial dbinom formula fitted fitted.values
@@ -79,9 +90,18 @@ fpi0est <- function(
   verbose = TRUE,
   ...
 ) {
-  # Input checks
-  if (min(p, na.rm = TRUE) < 0 || max(p, na.rm = TRUE) > 1) {
-    stop("P-values must be in [0, 1].")
+  if (
+    !is.null(pi0_model_obj) &&
+      (is.data.frame(pi0_model_obj) || is.matrix(pi0_model_obj))
+  ) {
+    if (is.null(z)) {
+      z <- pi0_model_obj
+      pi0_model_obj <- NULL
+    } else {
+      stop(
+        "Ambiguous input: You provided a matrix for 'pi0_model_obj' AND a 'z' argument."
+      )
+    }
   }
 
   if (!is.null(pi0_model_obj)) {
@@ -93,21 +113,38 @@ fpi0est <- function(
       )
     }
 
-    # Extract values
-    z <- pi0_model_obj$zt
+    if (is.null(z)) {
+      z <- pi0_model_obj$zt
+    } else {
+      warning("Both 'z' and 'pi0_model_obj' were provided. Using manual 'z'.")
+    }
 
-    # Allow manual override of formula even if object is provided
+    # Extract Formula (pi0_model)
     if (is.null(pi0_model)) {
       pi0_model <- pi0_model_obj$fmod
     }
   }
 
   if (is.null(z)) {
-    stop("Data 'z' is missing. Provide either 'z' directly or 'pi0_model_obj'.")
+    stop(
+      "Input 'z' is missing. Please provide either 'z' directly or 'pi0_model_obj'."
+    )
   }
+
+  if (!is.matrix(z) && !is.data.frame(z)) {
+    stop("'z' must be a matrix or data frame.")
+  }
+
   if (is.null(pi0_model)) {
-    stop("'pi0_model' must be provided.")
+    stop(
+      "Input 'pi0_model' is missing. Please provide either 'pi0_model' directly or 'pi0_model_obj'."
+    )
   }
+
+  if (min(p, na.rm = TRUE) < 0 || max(p, na.rm = TRUE) > 1) {
+    stop("P-values must be in [0, 1].")
+  }
+
   if (verbose) {
     message("==================================================")
     message("Estimating Functional Pi0")

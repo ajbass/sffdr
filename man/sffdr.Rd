@@ -87,7 +87,7 @@ fmod <- pi0_model(z)
 
 # Estimate functional pi0
 # (note: use indep_snps argument to specify independent SNPs for training)
-fpi0_out <- fpi0est(p, z = fmod$zt, pi0_model = fmod$fmod)
+fpi0_out <- fpi0est(p, fmod)
 fpi0 <- fpi0_out$fpi0
 
 # Apply sffdr
