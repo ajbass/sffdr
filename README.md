@@ -78,12 +78,10 @@ to create a model and `fpi0est` to estimate $\pi_{0}(z)$​.
 
 ``` r
 # Create model: adaptively chooses knots at small quantiles where signal is expected
-mpi0 <- pi0_model(z = z)
+mpi0 <- pi0_model(z)
 
 # Estimation of functional pi0
-fpi0 <- fpi0est(p = p,
-                z = mpi0$zt,
-                pi0_model = mpi0$fmod)
+fpi0 <- fpi0est(p, mpi0)
 ```
 
 **Note on Knots**: Ideally, knots should cover the distribution of
@@ -129,10 +127,7 @@ indep_snps <- rep(TRUE, length(p))
 # Fit model using LD-independent subset
 mpi0 <- pi0_model(z = z, indep_snps = indep_snps)
 
-fpi0 <- fpi0est(p = p,
-                z = mpi0$zt,
-                indep_snps = indep_snps,
-                pi0_model = mpi0$fmod)
+fpi0 <- fpi0est(p, mpi0, indep_snps = indep_snps)
 
 # Estimate quantities for all SNPs
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
@@ -157,8 +152,8 @@ of the p-value distribution to capture the local density of signals.
 # Create model (can include other variables (e.g., MAF) or specify more complicated models)
 fmod <- "~ns(bfp, knots = c(0.01, 0.025, 0.05, 0.1))"
 fpi0_mod <- fpi0est(p = p,
-                z = mpi0$zt,
-                pi0_model = fmod)
+                    z = mpi0$zt,
+                    pi0_model = fmod)
 ```
 
 **Note on incorporating additional variables**: Other informative

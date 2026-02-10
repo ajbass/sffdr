@@ -16,6 +16,10 @@
 #' constrained binomial family that bounds predictions away from 0 and 1.
 #'
 #' @param p Numeric vector of p-values.
+#' @param pi0_model_obj A list object returned by \code{\link{pi0_model}}. This list must
+#'   contain two elements: \code{fmod} (the formula) and \code{zt} (the rank-transformed
+#'   covariate matrix). If provided, \code{z} and \code{pi0_model} are extracted from this
+#'   object automatically, unless overridden by manual arguments.
 #' @param z Data frame of covariates (output from \code{\link{pi0_model}$zt}).
 #' @param lambda Numeric vector of lambda thresholds for estimating pi0.
 #'   Default is \code{seq(0.05, 0.95, 0.05)}.
@@ -51,7 +55,7 @@
 #' fmod <- pi0_model(z)
 #'
 #' # Estimate functional pi0
-#' fpi0_out <- fpi0est(p, z = fmod$zt, pi0_model = fmod$fmod)
+#' fpi0_out <- fpi0est(p, fmod)
 #' fpi0 <- fpi0_out$fpi0
 #' # Apply sffdr
 #' sffdr_out <- sffdr(p, fpi0)
@@ -64,10 +68,11 @@
 #' @export
 fpi0est <- function(
   p,
-  z,
-  lambda = seq(0.05, 0.95, 0.05),
+  pi0_model_obj = NULL,
+  z = NULL,
   pi0_model = NULL,
   indep_snps = NULL,
+  lambda = seq(0.05, 0.95, 0.05),
   constrained.p = TRUE,
   tol = 1e-9,
   maxit = 200,
@@ -79,6 +84,27 @@ fpi0est <- function(
     stop("P-values must be in [0, 1].")
   }
 
+  if (!is.null(pi0_model_obj)) {
+    if (
+      !is.list(pi0_model_obj) || !all(c("fmod", "zt") %in% names(pi0_model_obj))
+    ) {
+      stop(
+        "'pi0_model_obj' must be the output list from pi0_model() containing 'fmod' and 'zt'."
+      )
+    }
+
+    # Extract values
+    z <- pi0_model_obj$zt
+
+    # Allow manual override of formula even if object is provided
+    if (is.null(pi0_model)) {
+      pi0_model <- pi0_model_obj$fmod
+    }
+  }
+
+  if (is.null(z)) {
+    stop("Data 'z' is missing. Provide either 'z' directly or 'pi0_model_obj'.")
+  }
   if (is.null(pi0_model)) {
     stop("'pi0_model' must be provided.")
   }
