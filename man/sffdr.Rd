@@ -65,12 +65,15 @@ framework to leverage multiple informative variables (e.g., functional annotatio
 GWAS summary statistics) for increased power while controlling
 false discovery rates.
 
-**Workflow:**
-1. Estimate functional pi0 (proportion of nulls) using \code{\link{fpi0est}}
-2. Call \code{sffdr()} with p-values and estimated functional pi0
-3. Use returned functional p-values/q-values/local FDRs for significance testing
+Workflow:
 
-**Surrogate Variable:**
+\enumerate{
+  \item Estimate functional pi0 (proportion of nulls) using \code{\link{fpi0est}}
+  \item Call \code{sffdr()} with p-values and estimated functional pi0
+  \item Use returned functional p-values/q-values/local FDRs for significance testing
+}
+
+Surrogate Variable:
 If not specified, the estimated functional pi0 is used as the surrogate variable.
 }
 \examples{

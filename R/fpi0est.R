@@ -6,14 +6,15 @@
 #' lambda thresholds and selects the optimal estimate via MISE minimization.
 #'
 #' @details
-#' **Algorithm:**
+#' \strong{Algorithm:}
+#'
 #' \enumerate{
 #'   \item For each lambda threshold, fit a binomial GLM: \eqn{P(p \ge \lambda | z)}
 #'   \item Use constrained binomial family to ensure predictions in (0, 1)
 #'   \item Select optimal lambda via MISE minimization
 #' }
 #'
-#' **Usage Patterns:**
+#' \strong{Usage Patterns:}
 #'
 #' \strong{Pattern 1 (Recommended):} Use output from \code{\link{pi0_model}}
 #' \preformatted{
