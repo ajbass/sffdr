@@ -15,6 +15,7 @@ kernelEstimator(
   trim = 0,
   nn = NULL,
   tail_threshold = -2,
+  weights = NULL,
   ...
 )
 }
@@ -58,6 +59,8 @@ determined based on effective sample size to span approximately 5000 neighbors
 (bivariate case only). SNPs with z < \code{tail_threshold} are treated as
 signal-enriched and prioritized in the adaptive fit. Default: \code{-2}
 (approximately 2.3\% of standard normal distribution).}
+
+\item{weights}{Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores.}
 
 \item{...}{Additional arguments passed to \code{\link[locfit]{lp}} for controlling
 local polynomial fitting (e.g., \code{deg}, \code{kern}).}

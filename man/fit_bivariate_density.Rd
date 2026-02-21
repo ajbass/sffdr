@@ -11,6 +11,7 @@ fit_bivariate_density(
   nn,
   maxit,
   maxk,
+  weights = NULL,
   ...
 )
 }

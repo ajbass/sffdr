@@ -30,6 +30,7 @@
 #' @param surrogate Optional numeric vector (same length as \code{p.value}) used
 #'   as a surrogate variable for compression. If NULL (default), uses
 #'   \code{fpi0} as the surrogate.
+#' @param weights Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores.
 #' @param epsilon Numeric; lower bound for p-value clamping during density estimation.
 #'   Default is \code{.Machine$double.xmin}.
 #' @param nn Numeric; nearest-neighbor bandwidth for \code{\link{kernelEstimator}}.
@@ -88,6 +89,7 @@ sffdr <- function(
   p.value,
   fpi0,
   surrogate = NULL,
+  weights = NULL,
   epsilon = .Machine$double.xmin,
   nn = NULL,
   fp_ties = TRUE,
@@ -156,6 +158,17 @@ sffdr <- function(
   fpi0_valid <- fpi0[valid]
   n_valid <- sum(valid)
 
+  # Handle inverse LD weights for density estimation
+  w_valid <- if (!is.null(weights)) weights[valid] else NULL
+  has_weights <- !is.null(w_valid) && !all(is.na(w_valid))
+
+  if (has_weights && any(is.na(w_valid)) && verbose) {
+    message(sprintf(
+      "  Note: Weights missing for %.1f%% of SNPs. Training map on weighted subset...",
+      100 * mean(is.na(w_valid))
+    ))
+  }
+
   # Set surrogate variable
   if (verbose) {
     message("  Transforming surrogate variable...")
@@ -171,25 +184,51 @@ sffdr <- function(
     message("  Fitting kernel density...")
   }
 
-  kd <- kernelEstimator(
-    x = cbind(z, p_valid),
-    eval.points = cbind(z, p_valid),
-    nn = nn,
-    epsilon = epsilon,
-    ...
-  )
+  if (has_weights) {
+    # Weighted density estimation
+    train_idx <- !is.na(w_valid)
+    kd <- kernelEstimator(
+      x = cbind(z[train_idx], p_valid[train_idx]),
+      eval.points = cbind(z, p_valid), # Predict for ALL valid SNPs
+      nn = nn,
+      epsilon = epsilon,
+      weights = w_valid[train_idx],
+      ...
+    )
 
-  fx_valid <- kd$fx
+    # Marginal density of Z (1D weighted correction)
+    fx_uni <- kernelEstimator(
+      x = as.matrix(z[train_idx]),
+      eval.points = as.matrix(z),
+      nn = nn,
+      epsilon = epsilon,
+      weights = w_valid[train_idx],
+      ...
+    )
 
-  # Guard against zero or negative density
-  fx_valid <- pmax(fx_valid, .Machine$double.xmin)
+    # Use the ratio for lfdr, but keep joint density for the fx output
+    fx_valid <- pmax(kd$fx, .Machine$double.xmin) # Changed from valid_fx to fx_valid
+    marginal_fz <- pmax(fx_uni$fx, .Machine$double.xmin)
+  } else {
+    # Unweighted density estimation
+    kd <- kernelEstimator(
+      x = cbind(z, p_valid),
+      eval.points = cbind(z, p_valid),
+      nn = nn,
+      epsilon = epsilon,
+      weights = NULL,
+      ...
+    )
+    fx_valid <- pmax(kd$fx, .Machine$double.xmin)
+    marginal_fz <- 1
+  }
 
   # Compute functional local FDR
   if (verbose) {
     message("  Computing functional local FDRs...")
   }
 
-  lfdr_valid <- pmin(fpi0_valid / fx_valid, 1)
+  lfdr_valid <- pmin(fpi0_valid * marginal_fz / fx_valid, 1)
 
   # Compute functional p-values and q-values
   if (verbose) {

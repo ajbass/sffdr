@@ -8,6 +8,7 @@ sffdr(
   p.value,
   fpi0,
   surrogate = NULL,
+  weights = NULL,
   epsilon = .Machine$double.xmin,
   nn = NULL,
   fp_ties = TRUE,
@@ -25,6 +26,8 @@ from \code{\link{fpi0est}}. Values must be in [0, 1].}
 \item{surrogate}{Optional numeric vector (same length as \code{p.value}) used
 as a surrogate variable for compression. If NULL (default), uses
 \code{fpi0} as the surrogate.}
+
+\item{weights}{Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores.}
 
 \item{epsilon}{Numeric; lower bound for p-value clamping during density estimation.
 Default is \code{.Machine$double.xmin}.}

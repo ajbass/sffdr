@@ -1,5 +1,9 @@
 # sffdr (development version)
 
+# sffdr 1.1.1
+
+* Added a weights argument which allows users to input inverse LD scores and fit to all SNPs.
+
 # sffdr 1.1.0
 
 ## Major Changes

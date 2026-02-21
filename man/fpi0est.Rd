@@ -10,6 +10,7 @@ fpi0est(
   z = NULL,
   pi0_model = NULL,
   indep_snps = NULL,
+  weights = NULL,
   lambda = seq(0.05, 0.95, 0.05),
   constrained.p = TRUE,
   tol = 1e-09,
@@ -34,6 +35,9 @@ Required if \code{pi0_model_obj} is not provided. Default is NULL.}
 
 \item{indep_snps}{Optional logical vector indicating independent SNPs for
 model fitting. Default is NULL (all SNPs used).}
+
+\item{weights}{Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores. If these are available
+then you don't have to use the indep_snps argument, as the weights will effectively prioritize independent SNPs in the fitting process.}
 
 \item{lambda}{Numeric vector of lambda thresholds. Default is \code{seq(0.05, 0.95, 0.05)}.}
 

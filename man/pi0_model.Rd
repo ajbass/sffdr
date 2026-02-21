@@ -7,6 +7,7 @@
 pi0_model(
   z,
   indep_snps = NULL,
+  weights = NULL,
   fdr_threshold = 0.25,
   min_discoveries = 2500,
   min_snps_per_knot = 100,
@@ -19,6 +20,8 @@ pi0_model(
 
 \item{indep_snps}{Logical vector indicating independent SNPs (training subset).
 If NULL, uses all tests. Default: NULL.}
+
+\item{weights}{Optional numeric vector of weights (e.g., inverse LD scores) for weighted spline fitting. Default: NULL.}
 
 \item{fdr_threshold}{FDR threshold for signal definition. Default: 0.25.}
 

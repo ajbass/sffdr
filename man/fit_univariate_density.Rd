@@ -4,7 +4,7 @@
 \alias{fit_univariate_density}
 \title{Fit Univariate Density}
 \usage{
-fit_univariate_density(train_s, nn, maxit, maxk, ...)
+fit_univariate_density(train_s, nn, maxit, maxk, weights = NULL, ...)
 }
 \arguments{
 \item{train_s}{Numeric vector on probit scale.}

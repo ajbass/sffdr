@@ -39,6 +39,8 @@
 #'   Required if \code{pi0_model_obj} is not provided. Default is NULL.
 #' @param indep_snps Optional logical vector indicating independent SNPs for
 #'   model fitting. Default is NULL (all SNPs used).
+#' @param weights Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores. If these are available
+#'   then you don't have to use the indep_snps argument, as the weights will effectively prioritize independent SNPs in the fitting process.
 #' @param lambda Numeric vector of lambda thresholds. Default is \code{seq(0.05, 0.95, 0.05)}.
 #' @param constrained.p Logical; use constrained binomial family. Default is TRUE.
 #' @param tol Numeric; convergence tolerance. Default is 1e-9.
@@ -75,7 +77,7 @@
 #' @importFrom stats family predict model.matrix qnorm dnorm runif
 #'   quantile na.pass optimize binomial dbinom formula fitted fitted.values
 #'   gaussian median model.frame model.offset model.weights napredict
-#'   delete.response terms .checkMFClasses .getXlevels dlogis plogis
+#'   delete.response terms .checkMFClasses .getXlevels dlogis plogis aggregate
 #' @importFrom utils txtProgressBar setTxtProgressBar
 #' @export
 fpi0est <- function(
@@ -84,6 +86,7 @@ fpi0est <- function(
   z = NULL,
   pi0_model = NULL,
   indep_snps = NULL,
+  weights = NULL,
   lambda = seq(0.05, 0.95, 0.05),
   constrained.p = TRUE,
   tol = 1e-9,
@@ -172,14 +175,29 @@ fpi0est <- function(
   }
 
   # Select fitting subset (independent SNPs if provided)
+  # if (!is.null(indep_snps)) {
+  #   indep_valid <- indep_snps[valid_idx]
+  #   p_fit <- p_valid[indep_valid]
+  #   z_fit <- z_valid[indep_valid, , drop = FALSE]
+  # } else {
+  #   p_fit <- p_valid
+  #   z_fit <- z_valid
+  # }
+
+  fit_idx <- rep(TRUE, n_valid)
+
   if (!is.null(indep_snps)) {
-    indep_valid <- indep_snps[valid_idx]
-    p_fit <- p_valid[indep_valid]
-    z_fit <- z_valid[indep_valid, , drop = FALSE]
-  } else {
-    p_fit <- p_valid
-    z_fit <- z_valid
+    fit_idx <- fit_idx & indep_snps[valid_idx]
   }
+
+  if (!is.null(weights)) {
+    # Only fit on SNPs that have weights (e.g. HapMap3)
+    fit_idx <- fit_idx & !is.na(weights[valid_idx])
+  }
+
+  p_fit <- p_valid[fit_idx]
+  z_fit <- z_valid[fit_idx, , drop = FALSE]
+  w_fit <- if (!is.null(weights)) weights[valid_idx][fit_idx] else NULL
 
   # Build formula for binomial regression
   fm <- formula(paste("phi", paste(pi0_model, collapse = " ")))
@@ -206,6 +224,7 @@ fpi0est <- function(
         formula = fm,
         data = z_fit,
         family = fam,
+        weights = w_fit,
         tol = tol,
         maxit = maxit,
         ...

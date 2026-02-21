@@ -46,6 +46,8 @@
 #'   signal-enriched and prioritized in the adaptive fit. Default: \code{-2}
 #'   (approximately 2.3\% of standard normal distribution).
 #'
+#' @param weights Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores.
+#'
 #' @param ... Additional arguments passed to \code{\link[locfit]{lp}} for controlling
 #'   local polynomial fitting (e.g., \code{deg}, \code{kern}).
 #'
@@ -112,6 +114,7 @@ kernelEstimator <- function(
   trim = 0,
   nn = NULL,
   tail_threshold = -2,
+  weights = NULL,
   ...
 ) {
   # Input validation
@@ -149,6 +152,7 @@ kernelEstimator <- function(
       nn = nn,
       maxit = maxit,
       maxk = maxk,
+      weights = weights,
       ...
     )
   } else {
@@ -157,6 +161,7 @@ kernelEstimator <- function(
       nn = nn,
       maxit = maxit,
       maxk = maxk,
+      weights = weights,
       ...
     )
   }
@@ -169,7 +174,7 @@ kernelEstimator <- function(
   newdata <- if (is.matrix(eval_s)) {
     data.frame(V1 = eval_s[, 1], V2 = eval_s[, 2])
   } else {
-    eval_s
+    data.frame(train_s = eval_s)
   }
   fs_hat <- predict(lfit, newdata = newdata, log = FALSE)
 
@@ -223,50 +228,52 @@ fit_bivariate_density <- function(
   nn,
   maxit,
   maxk,
+  weights = NULL,
   ...
 ) {
-  # Identify signal vs null regions based on covariate
+  has_custom_weights <- !is.null(weights) && !all(weights == 1.0)
+
+  if (is.null(weights)) {
+    weights <- rep(1.0, nrow(train_s))
+  }
+
   z <- train_s[, 2]
   idx_tail <- which(z < tail_threshold)
   n_tail <- length(idx_tail)
 
   if (n_tail == 0) {
-    stop(
-      "No signal points (z < tail_threshold) found. ",
-      "Consider adjusting tail_threshold."
-    )
+    stop("No signal points found. Consider adjusting tail_threshold.")
   }
 
-  # Adaptive downsampling of null region
   n_total <- nrow(train_s)
   n_null <- n_total - n_tail
 
   if (n_null > target_null) {
-    # Downsample null, keep all signal
     idx_null <- which(z >= tail_threshold)
     idx_keep <- sample(idx_null, target_null)
     idx_final <- c(idx_tail, idx_keep)
-
-    # Weight to account for downsampling
-    w_null <- n_null / target_null # each retained null represents this many
-    w_vec <- c(rep(1.0, n_tail), rep(w_null, target_null))
+    w_null <- n_null / target_null
+    w_vec <- c(weights[idx_tail], weights[idx_keep] * w_null)
   } else {
-    # Keep all data
     idx_final <- seq_len(n_total)
-    w_vec <- rep(1.0, n_total)
+    w_vec <- weights
   }
 
-  # Prepare fitting data
   fit_data <- data.frame(
     V1 = train_s[idx_final, 1],
     V2 = train_s[idx_final, 2],
     w = w_vec
   )
 
-  # Validation data focuses on signal region
-  valid_data <- fit_data[seq_len(n_tail), , drop = FALSE]
+  if (has_custom_weights) {
+    fit_data$V1_round <- round(fit_data$V1, 3)
+    fit_data$V2_round <- round(fit_data$V2, 3)
+    fit_data <- aggregate(w ~ V1_round + V2_round, data = fit_data, FUN = sum)
+    names(fit_data) <- c("V1", "V2", "w")
+  }
 
-  # Automatic nn selection targeting ~5000 neighbors
+  valid_data <- fit_data[fit_data$V2 < tail_threshold, , drop = FALSE]
+
   n_eff <- nrow(fit_data)
   if (!is.null(nn)) {
     nn_high <- nn_safe <- nn
@@ -275,7 +282,6 @@ fit_bivariate_density <- function(
     nn_safe <- max(0.010, min(0.1, 5000 / n_eff))
   }
 
-  # Try cascade of fitting strategies
   fit_strategy_final(
     data = fit_data,
     valid_data = valid_data,
@@ -300,14 +306,43 @@ fit_bivariate_density <- function(
 #'
 #' @return Fitted locfit object.
 #' @keywords internal
-fit_univariate_density <- function(train_s, nn, maxit, maxk, ...) {
+fit_univariate_density <- function(
+  train_s,
+  nn,
+  maxit,
+  maxk,
+  weights = NULL,
+  ...
+) {
   n_eff <- length(train_s)
+  has_custom_weights <- !is.null(weights) && !all(weights == 1.0)
+
+  if (is.null(weights)) {
+    weights <- rep(1.0, n_eff)
+  }
+
+  fit_data <- data.frame(train_s = train_s, w = weights)
+
+  if (has_custom_weights) {
+    fit_data$train_s_round <- round(fit_data$train_s, 3)
+    fit_data <- aggregate(w ~ train_s_round, data = fit_data, FUN = sum)
+    names(fit_data) <- c("train_s", "w")
+    n_eff <- nrow(fit_data)
+  }
+
   nn_base <- if (!is.null(nn)) {
     nn
   } else {
     max(0.01, min(0.1, 10000 / n_eff))
   }
-  locfit(~ lp(train_s, nn = nn_base, ...), maxk = maxk, maxit = maxit)
+
+  locfit(
+    ~ lp(train_s, nn = nn_base, h = 0.05, ...),
+    data = fit_data,
+    weights = fit_data$w,
+    maxk = maxk,
+    maxit = maxit
+  )
 }
 
 #' Fit locfit with Multiple Fallback Strategies
@@ -357,43 +392,54 @@ fit_strategy_final <- function(
     p_lin <- exp(p_log)
     all(p_lin > 0)
   }
-
-  # Define fitting strategies in order of preference
   strats <- list(
     list(
       name = "High-Res Tcub",
       deg = 2,
       kern = "tcub",
       ev = rbox(),
-      nn = nn_high
+      nn = nn_high,
+      h = 0.05
     ),
     list(
       name = "High-Res Gauss",
       deg = 2,
       kern = "gauss",
       ev = rbox(),
-      nn = nn_high
+      nn = nn_high,
+      h = 0.05
     ),
     list(
       name = "Safe Tcub",
       deg = 2,
       kern = "tcub",
       ev = rbox(),
-      nn = nn_safe
+      nn = nn_safe,
+      h = 0.1
     ),
     list(
       name = "Linear Tree",
       deg = 1,
       kern = "tcub",
       ev = rbox(),
-      nn = 2 * nn_safe
+      nn = 2 * nn_safe,
+      h = 0.2
     )
   )
 
   # Try each strategy
   for (s in strats) {
     if (verbose) {
-      message("    ", s$name, " (nn=", round(s$nn, 5), ")...", appendLF = FALSE)
+      message(
+        "    ",
+        s$name,
+        " (nn=",
+        round(s$nn, 5),
+        ", h=",
+        s$h,
+        ")...",
+        appendLF = FALSE
+      )
     }
 
     fatal <- FALSE
@@ -402,7 +448,7 @@ fit_strategy_final <- function(
         withCallingHandlers(
           {
             locfit(
-              ~ lp(V1, V2, nn = s$nn, deg = s$deg),
+              ~ lp(V1, V2, nn = s$nn, h = s$h, deg = s$deg), # <-- h goes inside lp()
               data = data,
               weights = data$w,
               kern = s$kern,
@@ -432,12 +478,12 @@ fit_strategy_final <- function(
 
     if (!fatal && validate(fit)) {
       if (verbose) {
-        message(" \u2713") # Checkmark
+        message(" \u2713")
       }
       return(fit)
     } else {
       if (verbose) {
-        message(" \u2717") # X mark
+        message(" \u2717")
       }
     }
   }
