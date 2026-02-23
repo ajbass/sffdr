@@ -231,7 +231,6 @@ fit_bivariate_density <- function(
   weights = NULL,
   ...
 ) {
-  # 1. Handle missing weights gracefully
   if (is.null(weights)) {
     weights <- rep(1.0, nrow(train_s))
   }
@@ -257,7 +256,6 @@ fit_bivariate_density <- function(
     idx_final <- c(idx_tail, idx_keep)
     w_null <- n_null / target_null
 
-    # Clean multiplication of user weights by downsampling multiplier
     w_vec <- c(weights[idx_tail], weights[idx_keep] * w_null)
   } else {
     idx_final <- seq_len(n_total)
