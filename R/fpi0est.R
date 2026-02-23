@@ -587,13 +587,13 @@ pi0est_weighted <- function(
 
   pi0.method <- match.arg(pi0.method)
 
-  # 2. Effective Sample Size
+  # Effective Sample Size
   m_eff <- sum(weights)
 
   lambda <- sort(lambda)
   ll <- length(lambda)
 
-  # 3. Validation Checks
+  # Validation Checks
   if (min(p) < 0 || max(p) > 1) {
     stop("ERROR: p-values not in valid range [0, 1].")
   } else if (ll > 1 && ll < 4) {

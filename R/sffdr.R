@@ -206,8 +206,7 @@ sffdr <- function(
       ...
     )
 
-    # Use the ratio for lfdr, but keep joint density for the fx output
-    fx_valid <- pmax(kd$fx, .Machine$double.xmin) # Changed from valid_fx to fx_valid
+    fx_valid <- pmax(kd$fx, .Machine$double.xmin)
     marginal_fz <- pmax(fx_uni$fx, .Machine$double.xmin)
   } else {
     # Unweighted density estimation

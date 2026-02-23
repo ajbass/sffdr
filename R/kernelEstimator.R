@@ -330,7 +330,6 @@ fit_univariate_density <- function(
     max(0.01, min(0.1, 10000 / n_eff))
   }
 
-  # Fixed h=0.1 floor for 1D as discussed
   locfit(
     ~ lp(train_s, nn = nn_base, h = 0.1, ...),
     data = fit_data,
@@ -374,7 +373,7 @@ fit_strategy_final <- function(
     data[seq_len(min(100, nrow(data))), ]
   }
 
-  # Validation function: check predictions are valid
+  # Check predictions are valid
   validate <- function(mod) {
     if (is.null(mod)) {
       return(FALSE)
@@ -423,7 +422,6 @@ fit_strategy_final <- function(
     )
   )
 
-  # Try each strategy
   for (s in strats) {
     if (verbose) {
       message(
