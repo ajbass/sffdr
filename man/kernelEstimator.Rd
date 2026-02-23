@@ -7,7 +7,7 @@
 kernelEstimator(
   x,
   eval.points = x,
-  epsilon = 1e-15,
+  epsilon = .Machine$double.xmin,
   epsilon.max = 1 - 1e-04,
   maxk = 5e+05,
   maxit = 200,
@@ -20,17 +20,17 @@ kernelEstimator(
 )
 }
 \arguments{
-\item{x}{Numeric vector of p-values (for 1D density) or a 2-column matrix where
-the first column contains p-values and the second column contains an informative
-covariate/surrogate. All p-values must be in (0, 1) and the covariate/surrogate must
-be rank-transformed to be (0,1].}
+\item{x}{Numeric vector of p-values (for 1D density) or a  2-column matrix
+where the first column contains an informative covariate/surrogate and the
+second column contains the p-values. All p-values must be in (0, 1) and the
+covariate/surrogate must be rank-transformed to be (0,1].}
 
 \item{eval.points}{Points at which to evaluate the density estimate. Defaults to
 \code{x}. For custom evaluation points, must match the dimensionality of \code{x}
 (vector or 2-column matrix).}
 
 \item{epsilon}{Lower bound for p-values to prevent numerical issues. P-values
-below this are clamped to \code{epsilon}. Default: \code{1e-15}.}
+below this are clamped to \code{epsilon}. Default: \code{.Machine$double.xmin}.}
 
 \item{epsilon.max}{Upper bound for p-values. P-values above this are clamped to
 \code{epsilon.max}. Default: \code{1 - 1e-4}.}

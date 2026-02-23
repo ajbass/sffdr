@@ -6,17 +6,17 @@
 #' uses adaptive downsampling to prioritize signal-rich regions while maintaining
 #' computational efficiency.
 #'
-#' @param x Numeric vector of p-values (for 1D density) or a 2-column matrix where
-#'   the first column contains p-values and the second column contains an informative
-#'   covariate/surrogate. All p-values must be in (0, 1) and the covariate/surrogate must
-#'   be rank-transformed to be (0,1].
+#' @param x Numeric vector of p-values (for 1D density) or a  2-column matrix
+#'   where the first column contains an informative covariate/surrogate and the
+#'   second column contains the p-values. All p-values must be in (0, 1) and the
+#'   covariate/surrogate must be rank-transformed to be (0,1].
 #'
 #' @param eval.points Points at which to evaluate the density estimate. Defaults to
 #'   \code{x}. For custom evaluation points, must match the dimensionality of \code{x}
 #'   (vector or 2-column matrix).
 #'
 #' @param epsilon Lower bound for p-values to prevent numerical issues. P-values
-#'   below this are clamped to \code{epsilon}. Default: \code{1e-15}.
+#'   below this are clamped to \code{epsilon}. Default: \code{.Machine$double.xmin}.
 #'
 #' @param epsilon.max Upper bound for p-values. P-values above this are clamped to
 #'   \code{epsilon.max}. Default: \code{1 - 1e-4}.
@@ -106,7 +106,7 @@
 kernelEstimator <- function(
   x,
   eval.points = x,
-  epsilon = 1e-15,
+  epsilon = .Machine$double.xmin,
   epsilon.max = 1 - 1e-4,
   maxk = 500000,
   maxit = 200,
@@ -135,7 +135,7 @@ kernelEstimator <- function(
     clamp_and_transform(eval.points)
   }
 
-  # Add jitter to break ties and improve convergence
+  # Add jitter to Z-scores to prevent matrix singularities
   jitter_mag <- 1e-6
   if (is_matrix) {
     train_s[, 2] <- train_s[, 2] + runif(nrow(train_s), -jitter_mag, jitter_mag)
@@ -231,12 +231,12 @@ fit_bivariate_density <- function(
   weights = NULL,
   ...
 ) {
-  has_custom_weights <- !is.null(weights) && !all(weights == 1.0)
-
+  # 1. Handle missing weights gracefully
   if (is.null(weights)) {
     weights <- rep(1.0, nrow(train_s))
   }
 
+  # 2. Identify Signal vs Null
   z <- train_s[, 2]
   idx_tail <- which(z < tail_threshold)
   n_tail <- length(idx_tail)
@@ -248,32 +248,32 @@ fit_bivariate_density <- function(
   n_total <- nrow(train_s)
   n_null <- n_total - n_tail
 
+  # 3. Downsample and Multiply Weights
   if (n_null > target_null) {
     idx_null <- which(z >= tail_threshold)
+
     idx_keep <- sample(idx_null, target_null)
+
     idx_final <- c(idx_tail, idx_keep)
     w_null <- n_null / target_null
+
+    # Clean multiplication of user weights by downsampling multiplier
     w_vec <- c(weights[idx_tail], weights[idx_keep] * w_null)
   } else {
     idx_final <- seq_len(n_total)
     w_vec <- weights
   }
 
+  # 4. Construct Data Frames
   fit_data <- data.frame(
     V1 = train_s[idx_final, 1],
     V2 = train_s[idx_final, 2],
     w = w_vec
   )
 
-  if (has_custom_weights) {
-    fit_data$V1_round <- round(fit_data$V1, 3)
-    fit_data$V2_round <- round(fit_data$V2, 3)
-    fit_data <- aggregate(w ~ V1_round + V2_round, data = fit_data, FUN = sum)
-    names(fit_data) <- c("V1", "V2", "w")
-  }
-
   valid_data <- fit_data[fit_data$V2 < tail_threshold, , drop = FALSE]
 
+  # 5. Adaptive Bandwidth Selection
   n_eff <- nrow(fit_data)
   if (!is.null(nn)) {
     nn_high <- nn_safe <- nn
@@ -282,11 +282,15 @@ fit_bivariate_density <- function(
     nn_safe <- max(0.010, min(0.1, 5000 / n_eff))
   }
 
+  h_safe <- max(0.05, 0.5 * (n_eff^(-1 / 6)))
+
+  # 6. Fit Models
   fit_strategy_final(
     data = fit_data,
     valid_data = valid_data,
     nn_high = nn_high,
     nn_safe = nn_safe,
+    h_safe = h_safe,
     maxit = maxit,
     maxk = maxk,
     ...
@@ -315,7 +319,6 @@ fit_univariate_density <- function(
   ...
 ) {
   n_eff <- length(train_s)
-  has_custom_weights <- !is.null(weights) && !all(weights == 1.0)
 
   if (is.null(weights)) {
     weights <- rep(1.0, n_eff)
@@ -323,21 +326,15 @@ fit_univariate_density <- function(
 
   fit_data <- data.frame(train_s = train_s, w = weights)
 
-  if (has_custom_weights) {
-    fit_data$train_s_round <- round(fit_data$train_s, 3)
-    fit_data <- aggregate(w ~ train_s_round, data = fit_data, FUN = sum)
-    names(fit_data) <- c("train_s", "w")
-    n_eff <- nrow(fit_data)
-  }
-
   nn_base <- if (!is.null(nn)) {
     nn
   } else {
     max(0.01, min(0.1, 10000 / n_eff))
   }
 
+  # Fixed h=0.1 floor for 1D as discussed
   locfit(
-    ~ lp(train_s, nn = nn_base, h = 0.05, ...),
+    ~ lp(train_s, nn = nn_base, h = 0.1, ...),
     data = fit_data,
     weights = fit_data$w,
     maxk = maxk,
@@ -366,6 +363,7 @@ fit_strategy_final <- function(
   valid_data,
   nn_high,
   nn_safe,
+  h_safe,
   maxit,
   maxk,
   verbose = TRUE,
@@ -399,7 +397,7 @@ fit_strategy_final <- function(
       kern = "tcub",
       ev = rbox(),
       nn = nn_high,
-      h = 0.05
+      h = h_safe
     ),
     list(
       name = "High-Res Gauss",
@@ -407,7 +405,7 @@ fit_strategy_final <- function(
       kern = "gauss",
       ev = rbox(),
       nn = nn_high,
-      h = 0.05
+      h = h_safe
     ),
     list(
       name = "Safe Tcub",
@@ -415,7 +413,7 @@ fit_strategy_final <- function(
       kern = "tcub",
       ev = rbox(),
       nn = nn_safe,
-      h = 0.1
+      h = 2 * h_safe
     ),
     list(
       name = "Linear Tree",
@@ -423,7 +421,7 @@ fit_strategy_final <- function(
       kern = "tcub",
       ev = rbox(),
       nn = 2 * nn_safe,
-      h = 0.2
+      h = 2 * h_safe
     )
   )
 

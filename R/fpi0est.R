@@ -78,6 +78,7 @@
 #'   quantile na.pass optimize binomial dbinom formula fitted fitted.values
 #'   gaussian median model.frame model.offset model.weights napredict
 #'   delete.response terms .checkMFClasses .getXlevels dlogis plogis aggregate
+#'   smooth.spline
 #' @importFrom utils txtProgressBar setTxtProgressBar
 #' @export
 fpi0est <- function(
@@ -174,16 +175,6 @@ fpi0est <- function(
     ))
   }
 
-  # Select fitting subset (independent SNPs if provided)
-  # if (!is.null(indep_snps)) {
-  #   indep_valid <- indep_snps[valid_idx]
-  #   p_fit <- p_valid[indep_valid]
-  #   z_fit <- z_valid[indep_valid, , drop = FALSE]
-  # } else {
-  #   p_fit <- p_valid
-  #   z_fit <- z_valid
-  # }
-
   fit_idx <- rep(TRUE, n_valid)
 
   if (!is.null(indep_snps)) {
@@ -191,8 +182,7 @@ fpi0est <- function(
   }
 
   if (!is.null(weights)) {
-    # Only fit on SNPs that have weights (e.g. HapMap3)
-    fit_idx <- fit_idx & !is.na(weights[valid_idx])
+    fit_idx <- fit_idx & !is.na(weights[valid_idx]) & weights[valid_idx] > 0
   }
 
   p_fit <- p_valid[fit_idx]
@@ -248,7 +238,16 @@ fpi0est <- function(
     message("  Selecting optimal lambda via MISE...")
   }
   # Compute global pi0
-  pi0_global <- qvalue::pi0est(p_fit, pi0.method = "bootstrap")$pi0
+  if (is.null(w_fit)) {
+    pi0_global <- qvalue::pi0est(p_fit, pi0.method = "bootstrap")$pi0
+  } else {
+    pi0_global <- pi0est_weighted(
+      p_fit,
+      weights = w_fit,
+      pi0.method = "bootstrap"
+    )$pi0
+  }
+
   mise_stats <- vapply(
     seq_along(lambda),
     function(i) {
@@ -561,4 +560,96 @@ get_predict <- function(object, newdata, na.action = na.pass, ...) {
   cat("\r", strrep(" ", pb_width + 10), "\r", sep = "")
 
   result
+}
+
+pi0est_weighted <- function(
+  p,
+  weights = NULL,
+  lambda = seq(0.05, 0.95, 0.05),
+  pi0.method = c("smoother", "bootstrap"),
+  smooth.df = 3,
+  smooth.log.pi0 = FALSE,
+  ...
+) {
+  # 1. NA Handling
+  rm_na <- !is.na(p)
+  if (!is.null(weights)) {
+    rm_na <- rm_na & !is.na(weights)
+  }
+
+  p <- p[rm_na]
+
+  if (!is.null(weights)) {
+    weights <- weights[rm_na]
+  } else {
+    weights <- rep(1.0, length(p))
+  }
+
+  pi0.method <- match.arg(pi0.method)
+
+  # 2. Effective Sample Size
+  m_eff <- sum(weights)
+
+  lambda <- sort(lambda)
+  ll <- length(lambda)
+
+  # 3. Validation Checks
+  if (min(p) < 0 || max(p) > 1) {
+    stop("ERROR: p-values not in valid range [0, 1].")
+  } else if (ll > 1 && ll < 4) {
+    stop(sprintf(paste(
+      "ERROR:",
+      paste("length(lambda)=", ll, ".", sep = ""),
+      "If length of lambda greater than 1, you need at least 4 values."
+    )))
+  } else if (min(lambda) < 0 || max(lambda) >= 1) {
+    stop("ERROR: Lambda must be within [0, 1).")
+  }
+
+  W <- sapply(lambda, function(l) sum(weights[p >= l]))
+
+  pi0 <- W / (m_eff * (1 - lambda))
+  pi0.lambda <- pi0
+
+  if (ll == 1) {
+    pi0 <- min(pi0, 1)
+    pi0Smooth <- NULL
+  } else {
+    if (pi0.method == "smoother") {
+      if (smooth.log.pi0) {
+        pi0_log <- log(pi0)
+        spi0 <- smooth.spline(lambda, pi0_log, df = smooth.df)
+        pi0Smooth <- exp(predict(spi0, x = lambda)$y)
+        pi0 <- min(pi0Smooth[ll], 1)
+      } else {
+        spi0 <- smooth.spline(lambda, pi0, df = smooth.df)
+        pi0Smooth <- predict(spi0, x = lambda)$y
+        pi0 <- min(pi0Smooth[ll], 1)
+      }
+    } else if (pi0.method == "bootstrap") {
+      minpi0 <- quantile(pi0, prob = 0.1)
+
+      mse <- (W / (m_eff^2 * (1 - lambda)^2)) *
+        (1 - W / m_eff) +
+        (pi0 - minpi0)^2
+
+      pi0 <- min(pi0[mse == min(mse)], 1)
+      pi0Smooth <- NULL
+    } else {
+      stop("ERROR: pi0.method must be one of \"smoother\" or \"bootstrap\".")
+    }
+  }
+
+  if (pi0 <= 0) {
+    stop(
+      "ERROR: The estimated pi0 <= 0. Check that you have valid p-values or use a different range of lambda."
+    )
+  }
+
+  return(list(
+    pi0 = pi0,
+    pi0.lambda = pi0.lambda,
+    lambda = lambda,
+    pi0.smooth = pi0Smooth
+  ))
 }
