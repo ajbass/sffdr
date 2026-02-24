@@ -107,11 +107,11 @@ kernelEstimator <- function(
   x,
   eval.points = x,
   epsilon = .Machine$double.xmin,
-  epsilon.max = 1 - 1e-4,
+  epsilon.max = 1 - 1e-9,
   maxk = 500000,
   maxit = 200,
   target_null = 100000,
-  trim = 0,
+  trim = 0.1,
   nn = NULL,
   tail_threshold = -2,
   weights = NULL,
@@ -194,12 +194,30 @@ kernelEstimator <- function(
     fs = fs_hat
   )
 
-  # Apply boundary trimming for 1D case
+  # Apply boundary trimming for 1D case (Right tail only)
   if (trim > 0 && !is_matrix) {
-    val_lower <- res$fx[which.min(abs(res$x - trim))]
-    val_upper <- res$fx[which.min(abs(res$x - (1 - trim)))]
-    res$fx[res$x < trim] <- val_lower
+    anchor_idx <- which.min(abs(res$x - (1 - trim)))
+    val_upper <- res$fx[anchor_idx]
+
     res$fx[res$x > (1 - trim)] <- val_upper
+  }
+
+  # Apply boundary trimming for 2D case
+  if (trim > 0 && is_matrix) {
+    boundary_idx <- eval.points[, 2] > (1 - trim)
+
+    if (any(boundary_idx)) {
+      safe_eval_s <- eval_s[boundary_idx, , drop = FALSE]
+
+      safe_eval_s[, 2] <- qnorm(1 - trim)
+
+      safe_newdata <- data.frame(V1 = safe_eval_s[, 1], V2 = safe_eval_s[, 2])
+      safe_fs_hat <- predict(lfit, newdata = safe_newdata, log = FALSE)
+
+      safe_corrector <- dnorm(safe_eval_s[, 1]) * dnorm(safe_eval_s[, 2])
+      res$fx[boundary_idx] <- safe_fs_hat /
+        pmax(safe_corrector, .Machine$double.xmin)
+    }
   }
 
   attr(res, "lfit") <- lfit
