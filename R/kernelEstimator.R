@@ -276,8 +276,8 @@ fit_bivariate_density <- function(
   if (!is.null(nn)) {
     nn_high <- nn_safe <- nn
   } else {
-    nn_high <- max(0.005, min(0.1, 5000 / n_eff))
-    nn_safe <- max(0.010, min(0.1, 5000 / n_eff))
+    nn_high <- max(0.005, min(0.05, 5000 / n_eff))
+    nn_safe <- max(0.010, min(0.05, 5000 / n_eff))
   }
 
   h_safe <- max(0.05, 0.5 * (n_eff^(-1 / 6)))
