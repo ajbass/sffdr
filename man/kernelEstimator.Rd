@@ -8,11 +8,11 @@ kernelEstimator(
   x,
   eval.points = x,
   epsilon = .Machine$double.xmin,
-  epsilon.max = 1 - 1e-04,
+  epsilon.max = 1 - 1e-09,
   maxk = 5e+05,
   maxit = 200,
   target_null = 1e+05,
-  trim = 0,
+  trim = 0.1,
   nn = NULL,
   tail_threshold = -2,
   weights = NULL,
@@ -33,7 +33,7 @@ covariate/surrogate must be rank-transformed to be (0,1].}
 below this are clamped to \code{epsilon}. Default: \code{.Machine$double.xmin}.}
 
 \item{epsilon.max}{Upper bound for p-values. P-values above this are clamped to
-\code{epsilon.max}. Default: \code{1 - 1e-4}.}
+\code{epsilon.max}. Default: \code{1 - 1e-9}.}
 
 \item{maxk}{Maximum number of fitting points passed to \code{\link[locfit]{locfit}}.
 Increase for very large datasets. Default: \code{500000}.}
@@ -48,7 +48,7 @@ target and upweighted accordingly. Default: \code{100000}.}
 
 \item{trim}{For 1D estimation, fixes the density estimate to constant values on
 the intervals \code{(0, trim)} and \code{(1 - trim, 1)} to reduce boundary
-variance. Default: \code{0} (no trimming).}
+variance. Default: \code{0.1}.}
 
 \item{nn}{Nearest-neighbor bandwidth parameter for \code{\link[locfit]{locfit}},
 expressed as a fraction of the data. If \code{NULL} (default), automatically

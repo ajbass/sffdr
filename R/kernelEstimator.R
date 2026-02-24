@@ -19,7 +19,7 @@
 #'   below this are clamped to \code{epsilon}. Default: \code{.Machine$double.xmin}.
 #'
 #' @param epsilon.max Upper bound for p-values. P-values above this are clamped to
-#'   \code{epsilon.max}. Default: \code{1 - 1e-4}.
+#'   \code{epsilon.max}. Default: \code{1 - 1e-9}.
 #'
 #' @param maxk Maximum number of fitting points passed to \code{\link[locfit]{locfit}}.
 #'   Increase for very large datasets. Default: \code{500000}.
@@ -34,7 +34,7 @@
 #'
 #' @param trim For 1D estimation, fixes the density estimate to constant values on
 #'   the intervals \code{(0, trim)} and \code{(1 - trim, 1)} to reduce boundary
-#'   variance. Default: \code{0} (no trimming).
+#'   variance. Default: \code{0.1}.
 #'
 #' @param nn Nearest-neighbor bandwidth parameter for \code{\link[locfit]{locfit}},
 #'   expressed as a fraction of the data. If \code{NULL} (default), automatically
