@@ -19,13 +19,13 @@
 #'   below this are clamped to \code{epsilon}. Default: \code{.Machine$double.xmin}.
 #'
 #' @param epsilon.max Upper bound for p-values. P-values above this are clamped to
-#'   \code{epsilon.max}. Default: \code{1 - 1e-9}.
+#'   \code{epsilon.max}. Default: \code{1 - 1e-4}.
 #'
 #' @param maxk Maximum number of fitting points passed to \code{\link[locfit]{locfit}}.
 #'   Increase for very large datasets. Default: \code{500000}.
 #'
 #' @param maxit Maximum number of iterations for local regression fitting. Default:
-#'   \code{2000}.
+#'   \code{200}.
 #'
 #' @param target_null Maximum number of null SNPs to include in the weighted fit
 #'   (bivariate case only). SNPs in the signal-enriched tail (defined by
@@ -34,7 +34,7 @@
 #'
 #' @param trim For 1D estimation, fixes the density estimate to constant values on
 #'   the intervals \code{(0, trim)} and \code{(1 - trim, 1)} to reduce boundary
-#'   variance. Default: \code{0.1}.
+#'   variance. Default: \code{0.05}.
 #'
 #' @param nn Nearest-neighbor bandwidth parameter for \code{\link[locfit]{locfit}},
 #'   expressed as a fraction of the data. If \code{NULL} (default), automatically
@@ -107,11 +107,11 @@ kernelEstimator <- function(
   x,
   eval.points = x,
   epsilon = .Machine$double.xmin,
-  epsilon.max = 1 - 1e-9,
+  epsilon.max = 1 - 1e-4,
   maxk = 500000,
   maxit = 200,
   target_null = 100000,
-  trim = 0.1,
+  trim = 0.05,
   nn = NULL,
   tail_threshold = -2,
   weights = NULL,
@@ -345,7 +345,7 @@ fit_univariate_density <- function(
   nn_base <- if (!is.null(nn)) {
     nn
   } else {
-    max(0.01, min(0.1, 10000 / n_eff))
+    max(0.01, min(5, 5000 / n_eff))
   }
 
   locfit(
