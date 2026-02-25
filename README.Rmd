@@ -127,22 +127,26 @@ sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
 
 ### Enforcing monotonicity
 
-You can enforce a conditional non-increasing constraint on the estimated density within each surrogate bin (1,000 independent SNPs per bin): 
+The kernel density estimator is highly adaptive. However, sometimes structural artifacts—such as Linkage Disequilibrium (LD) or redundant summary statistics—can induce spurious "bumps" in the null region.
+
+You can enforce a monotone constraint within surrogate bins (targeting ~1,000 independent SNPs per bin) to stabilize the joint density:
 
 ```{r, eval = FALSE}
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, monotone = TRUE)
 ```
 
-This acts as a gaurdrail to stabilize the null region against overfitting or LD-driven artifacts. While this provides robustness for the null region, users should note it may result in a loss of power in specific cases. We are considering making this the default behavior in future releases, but for now it is optional.
+While this provides robustness in the null region, users should note it may result in a loss of power in specific cases. We are considering making this the default behavior in future releases, but for now it is optional.
 
 ### Incorporating LD scores
 
-If you have the LD scores for your SNPs, you can use them as weights in the package. This can help to mitigate the impact of LD on the density estimation and improve the accuracy of the estimated significance quantities. Also, you don't need to specify independent SNPs:
+If LD scores ($l_{j}$​) are available (e.g., from LDSC), they can be utilized as inverse-weights ($w_j​=1/l_{j}$​). This allows the estimators to account for LD directly while allowing the full dataset to be used. As such, pre-filtering for independent SNPs (LD-pruning) is unnecessary.
+
+Below we show how to incorporate weights into sfFDR:
 ```{r, eval = FALSE}
 LD_block <- 500:1000
 p[LD_block] <- rnorm(length(LD_block), mean = 0.8, sd = 0.02)
 
-# 3. Define Weights (Inverse LD)
+# Define weights (inverse LD)
 w <- rep(1.0, length(p))
 w[LD_block] <- 0.05
 
