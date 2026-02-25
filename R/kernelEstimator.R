@@ -344,7 +344,7 @@ fit_univariate_density <- function(
   nn_base <- if (!is.null(nn)) {
     nn
   } else {
-    max(0.01, min(5, 5000 / n_eff))
+    max(0.01, min(.05, 5000 / n_eff))
   }
 
   locfit(
