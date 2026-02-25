@@ -128,7 +128,7 @@ You can enforce a conditional non-increasing constraint on the estimated density
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, monotone = TRUE)
 ```
 
- This acts as a gaurdrail to stabilize the null region against overfitting or LD-driven artifacts. While this provides robustness for the null region, users should note it may result in a loss of power in specific cases. We are considering making this the default behavior in future releases, but for now it is optional.
+This acts as a gaurdrail to stabilize the null region against overfitting or LD-driven artifacts. While this provides robustness for the null region, users should note it may result in a loss of power in specific cases. We are considering making this the default behavior in future releases, but for now it is optional.
 
 ### Incorporating LD scores
 
@@ -160,6 +160,4 @@ fpi0_mod <- fpi0est(p = p,
 ``` 
 
   **Note on incorporating additional variables**: Other informative covariates can be included in the model (e.g., MAF, LD score, etc.). While the LD score annotations can be used (e.g., the baselineLD model), we have found that using the expected $\chi^{2}$ given the annotations performs better in practice and simplifies the model fitting.
-
-  
 
