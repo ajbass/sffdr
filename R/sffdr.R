@@ -201,8 +201,8 @@ sffdr <- function(
 
     # Marginal density of Z (1D weighted correction)
     fx_uni <- kernelEstimator(
-      x = as.matrix(z[train_idx]),
-      eval.points = as.matrix(z),
+      x = z[train_idx],
+      eval.points = z,
       nn = nn,
       epsilon = epsilon,
       weights = w_valid[train_idx],

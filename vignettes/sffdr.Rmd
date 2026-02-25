@@ -120,6 +120,33 @@ sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
 
 ## Advanced usage
 
+### Enforcing monotonicity
+
+You can enforce a conditional non-increasing constraint on the estimated density within each surrogate bin (1,000 independent SNPs per bin):
+
+```{r, eval = FALSE}
+sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, monotone = TRUE)
+```
+
+ This acts as a gaurdrail to stabilize the null region against overfitting or LD-driven artifacts. While this provides robustness for the null region, users should note it may result in a loss of power in specific cases. We are considering making this the default behavior in future releases, but for now it is optional.
+
+### Incorporating LD scores
+
+If you have the LD scores for your SNPs, you can use them as weights in the package. This can help to mitigate the impact of LD on the density estimation and improve the accuracy of the estimated significance quantities. Also, you don't need to specify independent SNPs:
+```{r, eval = FALSE}
+LD_block <- 500:1000
+p[LD_block] <- rnorm(length(LD_block), mean = 0.8, sd = 0.02)
+
+# 3. Define Weights (Inverse LD)
+w <- rep(1.0, length(p))
+w[LD_block] <- 0.05
+
+# Apply sfFDR with weights
+mpi0 <- pi0_model(z, weights = w)
+fpi0 <- fpi0est(p, mpi0, weights = w)
+sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, weights = w)
+```
+
 ### Manual Knot Selection and using other informative variables
 
 The selection of knots in the B-spline basis is an important tuning parameter in sffdr. If your surrogate GWAS has extremely high power (very small p-values), we recommend placing more knots at the lower end of the p-value distribution to capture the local density of signals.
@@ -133,3 +160,6 @@ fpi0_mod <- fpi0est(p = p,
 ``` 
 
   **Note on incorporating additional variables**: Other informative covariates can be included in the model (e.g., MAF, LD score, etc.). While the LD score annotations can be used (e.g., the baselineLD model), we have found that using the expected $\chi^{2}$ given the annotations performs better in practice and simplifies the model fitting.
+
+  
+
