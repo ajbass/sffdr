@@ -144,7 +144,7 @@ latter is likely better when the primary study has low power.
 
 ### Enforcing monotonicity
 
-The kernel density estimator is adaptive. However, sometimes  artifacts—such as Linkage Disequilibrium (LD) or redundant summary statistics—can induce spurious "bumps" in the null region.
+The kernel density estimator is adaptive. However, sometimes  artifacts---such as LD---can induce spurious "bumps" in the null region which can impact density estimation.
 
 You can enforce a monotone constraint within surrogate bins (targeting ~1,000 independent SNPs per bin) to stabilize the joint density:
 
@@ -156,10 +156,11 @@ While this provides robustness in the null region, users should note it may resu
 
 ### Incorporating LD scores
 
-If LD scores ($l_{j}$​) are available (e.g., from LDSC), they can be utilized as inverse-weights ($w_j​=1/l_{j}$​). This allows the estimators to account for LD directly while allowing the full dataset to be used. As such, pre-filtering for independent SNPs (LD-pruning) is unnecessary.
+If LD scores ($l_{j}$​) are available (e.g., from LDSC regression), they can be utilized as inverse-weights ($w_j​=1/l_{j}$​). This allows the estimators to account for LD directly while allowing the full dataset to be used. As such, pre-filtering for independent SNPs (i.e., pruning) is unnecessary.
 
 Below we show how to incorporate weights into sfFDR:
-```r
+``` r
+# Create an artificial LD block
 LD_block <- 500:1000
 p[LD_block] <- rnorm(length(LD_block), mean = 0.8, sd = 0.02)
 
@@ -173,6 +174,7 @@ fpi0 <- fpi0est(p, mpi0, weights = w)
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, weights = w)
 ```
 
+  **Note on incorporating LD scores**: As LD scores are available for common reference panels (e.g., 1000 Genomes), they can be easily downloaded to use in sfFDR. If you have LD scores calculated from your data then that's even better. However, it is problematic to use LD scores when the reference panel is not matched to your study population. In that case, the pruning (or informative sampling) strategy discussed above is the best option.
 
 ### Manual Knot Selection and using other informative variables
 
