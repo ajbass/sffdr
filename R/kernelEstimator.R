@@ -32,9 +32,10 @@
 #'   \code{tail_threshold}) are always retained; null SNPs are downsampled to this
 #'   target and upweighted accordingly. Default: \code{100000}.
 #'
-#' @param trim For 1D estimation, fixes the density estimate to constant values on
-#'   the intervals \code{(0, trim)} and \code{(1 - trim, 1)} to reduce boundary
-#'   variance. Default: \code{0.05}.
+#' @param trim Numeric in [0, 1); if > 0, flattens the density for p-values
+#'   in (1 - trim, 1) to reduce boundary artifacts from p-values artificially
+#'   clumped near 1. Only applies to the p-value dimension. Default is 0
+#'   (no trimming).
 #'
 #' @param nn Nearest-neighbor bandwidth parameter for \code{\link[locfit]{locfit}},
 #'   expressed as a fraction of the data. If \code{NULL} (default), automatically
@@ -111,7 +112,7 @@ kernelEstimator <- function(
   maxk = 500000,
   maxit = 200,
   target_null = 100000,
-  trim = 0.05,
+  trim = 0,
   nn = NULL,
   tail_threshold = -2,
   weights = NULL,
@@ -194,15 +195,15 @@ kernelEstimator <- function(
     fs = fs_hat
   )
 
-  # Apply boundary trimming for 1D case (Right tail only)
-  if (trim > 0 && !is_matrix) {
-    anchor_idx <- which.min(abs(res$x - (1 - trim)))
-    val_upper <- res$fx[anchor_idx]
+  # # Apply boundary trimming for 1D case (lower + upper)
+  # if (trim > 0 && !is_matrix) {
+  #   val_lower <- res$fx[which.min(abs(res$x - trim))]
+  #   val_upper <- res$fx[which.min(abs(res$x - (1 - trim)))]
+  #   res$fx[res$x < trim] <- val_lower
+  #   res$fx[res$x > (1 - trim)] <- val_upper
+  # }
 
-    res$fx[res$x > (1 - trim)] <- val_upper
-  }
-
-  # Apply boundary trimming for 2D case
+  # Apply boundary trimming for 2D case (just upper)
   if (trim > 0 && is_matrix) {
     boundary_idx <- eval.points[, 2] > (1 - trim)
 

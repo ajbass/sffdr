@@ -203,6 +203,7 @@ sffdr <- function(
       nn = nn,
       epsilon = epsilon,
       weights = w_valid[train_idx],
+      #trim = 0, # No trimming for marginal density
       ...
     )
 
