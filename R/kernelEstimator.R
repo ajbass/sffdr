@@ -48,7 +48,7 @@
 #'   (approximately 2.3\% of standard normal distribution).
 #'
 #' @param weights Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores.
-#'
+#' @param verbose Logical; whether to print progress messages during fitting. Default is TRUE.
 #' @param ... Additional arguments passed to \code{\link[locfit]{lp}} for controlling
 #'   local polynomial fitting (e.g., \code{deg}, \code{kern}).
 #'
@@ -116,6 +116,7 @@ kernelEstimator <- function(
   nn = NULL,
   tail_threshold = -2,
   weights = NULL,
+  verbose = TRUE,
   ...
 ) {
   # Input validation
@@ -154,6 +155,7 @@ kernelEstimator <- function(
       maxit = maxit,
       maxk = maxk,
       weights = weights,
+      verbose = verbose,
       ...
     )
   } else {
@@ -195,14 +197,6 @@ kernelEstimator <- function(
     fs = fs_hat
   )
 
-  # # Apply boundary trimming for 1D case (lower + upper)
-  # if (trim > 0 && !is_matrix) {
-  #   val_lower <- res$fx[which.min(abs(res$x - trim))]
-  #   val_upper <- res$fx[which.min(abs(res$x - (1 - trim)))]
-  #   res$fx[res$x < trim] <- val_lower
-  #   res$fx[res$x > (1 - trim)] <- val_upper
-  # }
-
   # Apply boundary trimming for 2D case (just upper)
   if (trim > 0 && is_matrix) {
     boundary_idx <- eval.points[, 2] > (1 - trim)
@@ -236,6 +230,8 @@ kernelEstimator <- function(
 #' @param nn Nearest-neighbor bandwidth (NULL for automatic).
 #' @param maxit Maximum iterations for locfit.
 #' @param maxk Maximum fitting points for locfit.
+#' @param weights Optional numeric vector of weights for density estimation.
+#' @param verbose Logical; whether to print progress messages during fitting.
 #' @param ... Additional arguments for lp().
 #'
 #' @return Fitted locfit object or NULL.
@@ -248,6 +244,7 @@ fit_bivariate_density <- function(
   maxit,
   maxk,
   weights = NULL,
+  verbose = TRUE,
   ...
 ) {
   if (is.null(weights)) {
@@ -310,6 +307,7 @@ fit_bivariate_density <- function(
     h_safe = h_safe,
     maxit = maxit,
     maxk = maxk,
+    verbose = verbose,
     ...
   )
 }
@@ -382,7 +380,7 @@ fit_strategy_final <- function(
   h_safe,
   maxit,
   maxk,
-  verbose = TRUE,
+  verbose,
   ...
 ) {
   # Subset for validation checks

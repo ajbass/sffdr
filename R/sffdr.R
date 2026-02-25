@@ -35,6 +35,7 @@
 #'   Default is \code{.Machine$double.xmin}.
 #' @param nn Numeric; nearest-neighbor bandwidth for \code{\link{kernelEstimator}}.
 #'   If NULL (default), automatically selected as ~5000 neighbors.
+#' @param monotone Logical; if TRUE, enforces monotonicity of the estimated density with respect to p-values within bins of the surrogate variable. Default is FALSE.
 #' @param fp_ties Logical; whether to break ties in functional p-values using the
 #'   original p-value ordering. Default is TRUE.
 #' @param seed Integer; random seed for reproducibility of rank tie-breaking.
@@ -92,6 +93,7 @@ sffdr <- function(
   weights = NULL,
   epsilon = .Machine$double.xmin,
   nn = NULL,
+  monotone = FALSE,
   fp_ties = TRUE,
   seed = 2026,
   verbose = TRUE,
@@ -193,6 +195,7 @@ sffdr <- function(
       nn = nn,
       epsilon = epsilon,
       weights = w_valid[train_idx],
+      verbose = verbose,
       ...
     )
 
@@ -203,7 +206,7 @@ sffdr <- function(
       nn = nn,
       epsilon = epsilon,
       weights = w_valid[train_idx],
-      #trim = 0, # No trimming for marginal density
+      verbose = verbose,
       ...
     )
 
@@ -217,10 +220,34 @@ sffdr <- function(
       nn = nn,
       epsilon = epsilon,
       weights = NULL,
+      verbose = verbose,
       ...
     )
     fx_valid <- pmax(kd$fx, .Machine$double.xmin)
     marginal_fz <- 1
+  }
+
+  if (monotone) {
+    if (verbose) {
+      message("  Enforcing conditional monotonicity on estimated density...")
+    }
+
+    eff_n <- if (has_weights) sum(w_valid) else n_valid
+
+    min_snps_per_bin <- 1000
+    n_bins <- as.integer(max(10, min(1000, floor(eff_n / min_snps_per_bin))))
+
+    groups <- as.integer(cut(z, breaks = n_bins, labels = FALSE))
+
+    ord <- order(groups, p_valid)
+
+    smoothed_fx <- monoSmooth_conditional(
+      pvalue = p_valid[ord],
+      density = fx_valid[ord],
+      group = groups[ord]
+    )
+
+    fx_valid[ord] <- smoothed_fx
   }
 
   # Compute functional local FDR
@@ -276,4 +303,6 @@ sffdr <- function(
 #' @importFrom qvalue qvalue pi0est
 #' @importFrom locfit locfit lp rbox
 #' @importFrom splines ns
+#' @useDynLib sffdr, .registration = TRUE
+#' @importFrom Rcpp sourceCpp
 NULL

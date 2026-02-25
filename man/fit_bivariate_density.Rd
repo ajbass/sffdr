@@ -12,6 +12,7 @@ fit_bivariate_density(
   maxit,
   maxk,
   weights = NULL,
+  verbose = TRUE,
   ...
 )
 }
@@ -27,6 +28,10 @@ fit_bivariate_density(
 \item{maxit}{Maximum iterations for locfit.}
 
 \item{maxk}{Maximum fitting points for locfit.}
+
+\item{weights}{Optional numeric vector of weights for density estimation.}
+
+\item{verbose}{Logical; whether to print progress messages during fitting.}
 
 \item{...}{Additional arguments for lp().}
 }

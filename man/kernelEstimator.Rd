@@ -12,10 +12,11 @@ kernelEstimator(
   maxk = 5e+05,
   maxit = 200,
   target_null = 1e+05,
-  trim = 0.05,
+  trim = 0,
   nn = NULL,
   tail_threshold = -2,
   weights = NULL,
+  verbose = TRUE,
   ...
 )
 }
@@ -46,9 +47,10 @@ Increase for very large datasets. Default: \code{500000}.}
 \code{tail_threshold}) are always retained; null SNPs are downsampled to this
 target and upweighted accordingly. Default: \code{100000}.}
 
-\item{trim}{For 1D estimation, fixes the density estimate to constant values on
-the intervals \code{(0, trim)} and \code{(1 - trim, 1)} to reduce boundary
-variance. Default: \code{0.05}.}
+\item{trim}{Numeric in [0, 1); if > 0, flattens the density for p-values
+in (1 - trim, 1) to reduce boundary artifacts from p-values artificially
+clumped near 1. Only applies to the p-value dimension. Default is 0
+(no trimming).}
 
 \item{nn}{Nearest-neighbor bandwidth parameter for \code{\link[locfit]{locfit}},
 expressed as a fraction of the data. If \code{NULL} (default), automatically
@@ -61,6 +63,8 @@ signal-enriched and prioritized in the adaptive fit. Default: \code{-2}
 (approximately 2.3\% of standard normal distribution).}
 
 \item{weights}{Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores.}
+
+\item{verbose}{Logical; whether to print progress messages during fitting. Default is TRUE.}
 
 \item{...}{Additional arguments passed to \code{\link[locfit]{lp}} for controlling
 local polynomial fitting (e.g., \code{deg}, \code{kern}).}

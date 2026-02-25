@@ -11,6 +11,7 @@ sffdr(
   weights = NULL,
   epsilon = .Machine$double.xmin,
   nn = NULL,
+  monotone = FALSE,
   fp_ties = TRUE,
   seed = 2026,
   verbose = TRUE,
@@ -34,6 +35,8 @@ Default is \code{.Machine$double.xmin}.}
 
 \item{nn}{Numeric; nearest-neighbor bandwidth for \code{\link{kernelEstimator}}.
 If NULL (default), automatically selected as ~5000 neighbors.}
+
+\item{monotone}{Logical; if TRUE, enforces monotonicity of the estimated density with respect to p-values within bins of the surrogate variable. Default is FALSE.}
 
 \item{fp_ties}{Logical; whether to break ties in functional p-values using the
 original p-value ordering. Default is TRUE.}

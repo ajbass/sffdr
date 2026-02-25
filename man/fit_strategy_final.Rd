@@ -12,7 +12,7 @@ fit_strategy_final(
   h_safe,
   maxit,
   maxk,
-  verbose = TRUE,
+  verbose,
   ...
 )
 }
