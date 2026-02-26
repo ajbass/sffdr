@@ -137,6 +137,10 @@ kernelEstimator <- function(
     clamp_and_transform(eval.points)
   }
 
+  if (!is.null(weights)) {
+    weights <- pmin(pmax(weights, 1e-6), 1.0)
+  }
+
   # Add jitter to Z-scores to prevent matrix singularities
   jitter_mag <- 1e-6
   if (is_matrix) {
