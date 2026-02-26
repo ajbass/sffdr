@@ -15,3 +15,15 @@ monoSmooth_conditional <- function(pvalue, density, group) {
     .Call(`_sffdr_monoSmooth_conditional`, pvalue, density, group)
 }
 
+#' Fast Conditional PAVA (Decreasing)
+#'  
+#' @param pvalue A numeric vector of p-values. Must be sorted ascendingly within each group.
+#' @param density A numeric vector of initial density estimates (e.g., from locfit).
+#' @param group An integer vector denoting the surrogate bin/stratum for each observation.
+#' 
+#' @return A numeric vector of smoothed, monotonically non-increasing densities.
+#' @export
+monoSmooth_pava <- function(pvalue, density, group) {
+    .Call(`_sffdr_monoSmooth_pava`, pvalue, density, group)
+}
+

@@ -14,6 +14,7 @@
 #'   discoveries (via `min_snps_per_knot`) or capped by `max_knots`.
 #' @param min_snps_per_knot Min significant SNPs per knot interval. Default: 100. Note that this is the minimum independent SNPs required per knot interval if `indep_snps` is provided.
 #' @param verbose Print selection details. Default: TRUE.
+#' @param seed Optional seed for reproducibility. Default: 2026.
 #'
 #' @details
 #' Independent SNPs determine knot placement; all SNPs train the model to capture signal shape.
@@ -32,8 +33,13 @@ pi0_model <- function(
   min_discoveries = 2500,
   min_snps_per_knot = 100,
   n_knots = 5,
-  verbose = TRUE
+  verbose = TRUE,
+  seed = 2026
 ) {
+  if (!is.null(seed)) {
+    withr::local_seed(seed)
+  }
+
   if (!is.matrix(z) && !is.data.frame(z)) {
     stop("'z' must be a matrix/data.frame")
   }
@@ -196,7 +202,7 @@ pi0_model <- function(
       indep_ranks_subset <- rank_vals[is_indep_subset]
       indep_weights_subset <- w_vals[is_indep_subset]
 
-      min_indep_support <- 50 # min_snps_per_knot logic
+      min_indep_support <- min_snps_per_knot / 2
 
       repeat {
         if (length(knot_locs) == 0) {

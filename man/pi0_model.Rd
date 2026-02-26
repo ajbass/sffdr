@@ -12,7 +12,8 @@ pi0_model(
   min_discoveries = 2500,
   min_snps_per_knot = 100,
   n_knots = 5,
-  verbose = TRUE
+  verbose = TRUE,
+  seed = 2026
 )
 }
 \arguments{
@@ -33,6 +34,8 @@ If NULL, uses all tests. Default: NULL.}
 discoveries (via `min_snps_per_knot`) or capped by `max_knots`.}
 
 \item{verbose}{Print selection details. Default: TRUE.}
+
+\item{seed}{Optional seed for reproducibility. Default: 2026.}
 }
 \value{
 List containing:

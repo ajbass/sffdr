@@ -12,6 +12,7 @@ sffdr(
   epsilon = .Machine$double.xmin,
   nn = NULL,
   monotone = FALSE,
+  monotone_method = c("min", "pava"),
   fp_ties = TRUE,
   seed = 2026,
   verbose = TRUE,
@@ -37,6 +38,9 @@ Default is \code{.Machine$double.xmin}.}
 If NULL (default), automatically selected as ~5000 neighbors.}
 
 \item{monotone}{Logical; if TRUE, enforces monotonicity of the estimated density with respect to p-values within bins of the surrogate variable. Default is FALSE.}
+
+\item{monotone_method}{Character; method for enforcing monotonicity. Options are "min" (running minimum) or "pava" (Pool Adjacent Violators Algorithm). Default is "min".
+We do not recommend "pava" for GWAS data sets due to LD, but it may be better for expression data.}
 
 \item{fp_ties}{Logical; whether to break ties in functional p-values using the
 original p-value ordering. Default is TRUE.}

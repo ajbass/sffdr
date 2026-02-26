@@ -183,10 +183,12 @@ kernelEstimator <- function(
 
   # Jacobian correction to transform back to original scale
   corrector <- if (is.matrix(eval_s)) {
-    dnorm(eval_s[, 1]) * dnorm(eval_s[, 2])
+    log_corr <- dnorm(eval_s[, 1], log = TRUE) + dnorm(eval_s[, 2], log = TRUE)
+    exp(log_corr)
   } else {
-    dnorm(eval_s)
+    exp(dnorm(eval_s, log = TRUE))
   }
+
   fx_hat <- fs_hat / pmax(corrector, .Machine$double.xmin)
 
   # Build result data frame
@@ -218,7 +220,6 @@ kernelEstimator <- function(
   attr(res, "lfit") <- lfit
   res
 }
-
 
 #' Fit Bivariate Density with Adaptive Downsampling
 #'
@@ -288,7 +289,7 @@ fit_bivariate_density <- function(
   valid_data <- fit_data[fit_data$V2 < tail_threshold, , drop = FALSE]
 
   # 5. Adaptive Bandwidth Selection
-  n_eff <- nrow(fit_data)
+  n_eff <- sum(fit_data$w)
   if (!is.null(nn)) {
     nn_high <- nn_safe <- nn
   } else {
@@ -333,13 +334,13 @@ fit_univariate_density <- function(
   weights = NULL,
   ...
 ) {
-  n_eff <- length(train_s)
-
   if (is.null(weights)) {
-    weights <- rep(1.0, n_eff)
+    weights <- rep(1.0, length(train_s))
   }
 
   fit_data <- data.frame(train_s = train_s, w = weights)
+
+  n_eff <- sum(fit_data$w)
 
   nn_base <- if (!is.null(nn)) {
     nn
@@ -347,8 +348,10 @@ fit_univariate_density <- function(
     max(0.01, min(.05, 5000 / n_eff))
   }
 
+  h_safe <- max(0.05, 0.5 * (n_eff^(-1 / 6)))
+
   locfit(
-    ~ lp(train_s, nn = nn_base, h = 0.1, ...),
+    ~ lp(train_s, nn = nn_base, h = h_safe, ...),
     data = fit_data,
     weights = fit_data$w,
     maxk = maxk,
@@ -447,7 +450,7 @@ fit_strategy_final <- function(
         " (nn=",
         round(s$nn, 5),
         ", h=",
-        s$h,
+        round(s$h, 5),
         ")...",
         appendLF = FALSE
       )

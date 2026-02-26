@@ -36,6 +36,8 @@
 #' @param nn Numeric; nearest-neighbor bandwidth for \code{\link{kernelEstimator}}.
 #'   If NULL (default), automatically selected as ~5000 neighbors.
 #' @param monotone Logical; if TRUE, enforces monotonicity of the estimated density with respect to p-values within bins of the surrogate variable. Default is FALSE.
+#' @param monotone_method Character; method for enforcing monotonicity. Options are "min" (running minimum) or "pava" (Pool Adjacent Violators Algorithm). Default is "min".
+#'   We do not recommend "pava" for GWAS data sets due to LD, but it may be better for expression data.
 #' @param fp_ties Logical; whether to break ties in functional p-values using the
 #'   original p-value ordering. Default is TRUE.
 #' @param seed Integer; random seed for reproducibility of rank tie-breaking.
@@ -94,6 +96,7 @@ sffdr <- function(
   epsilon = .Machine$double.xmin,
   nn = NULL,
   monotone = FALSE,
+  monotone_method = c("min", "pava"),
   fp_ties = TRUE,
   seed = 2026,
   verbose = TRUE,
@@ -115,6 +118,7 @@ sffdr <- function(
 
   # Input validation
   n <- length(p.value)
+  monotone_method <- match.arg(monotone_method, c("min", "pava"))
 
   if (!is.numeric(p.value)) {
     stop("'p.value' must be a numeric vector.")
@@ -229,24 +233,45 @@ sffdr <- function(
 
   if (monotone) {
     if (verbose) {
-      message("  Enforcing conditional monotonicity on estimated density...")
+      msg <- sprintf(
+        "  Enforcing conditional monotonicity using the '%s' method...",
+        monotone_method
+      )
+      message(msg)
     }
 
-    eff_n <- if (has_weights) sum(w_valid) else n_valid
+    # Calculate Effective N (accounting for LD weights)
+    eff_n <- if (!is.null(weights)) sum(w_valid, na.rm = TRUE) else n_valid
 
-    min_snps_per_bin <- 1000
-    n_bins <- as.integer(max(10, min(1000, floor(eff_n / min_snps_per_bin))))
+    # Target ~1,000 independent SNPs per bin
+    n_bins <- as.integer(max(10, min(1000, floor(eff_n / 1000))))
+
+    if (verbose) {
+      message(sprintf(
+        "    Dividing data into %d conditional surrogate bins...",
+        n_bins
+      ))
+    }
 
     groups <- as.integer(cut(z, breaks = n_bins, labels = FALSE))
-
     ord <- order(groups, p_valid)
 
-    smoothed_fx <- monoSmooth_conditional(
-      pvalue = p_valid[ord],
-      density = fx_valid[ord],
-      group = groups[ord]
-    )
+    # Route to the appropriate C++ engine based on user choice
+    if (monotone_method == "min") {
+      smoothed_fx <- monoSmooth_conditional(
+        pvalue = p_valid[ord],
+        density = fx_valid[ord],
+        group = groups[ord]
+      )
+    } else {
+      smoothed_fx <- monoSmooth_pava(
+        pvalue = p_valid[ord],
+        density = fx_valid[ord],
+        group = groups[ord]
+      )
+    }
 
+    # Invert the order to map back to valid subset
     fx_valid[ord] <- smoothed_fx
   }
 

@@ -23,9 +23,23 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// monoSmooth_pava
+NumericVector monoSmooth_pava(NumericVector pvalue, NumericVector density, IntegerVector group);
+RcppExport SEXP _sffdr_monoSmooth_pava(SEXP pvalueSEXP, SEXP densitySEXP, SEXP groupSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type pvalue(pvalueSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type density(densitySEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type group(groupSEXP);
+    rcpp_result_gen = Rcpp::wrap(monoSmooth_pava(pvalue, density, group));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_sffdr_monoSmooth_conditional", (DL_FUNC) &_sffdr_monoSmooth_conditional, 3},
+    {"_sffdr_monoSmooth_pava", (DL_FUNC) &_sffdr_monoSmooth_pava, 3},
     {NULL, NULL, 0}
 };
 
