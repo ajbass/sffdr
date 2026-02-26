@@ -162,7 +162,7 @@ Below we show how to incorporate weights into sfFDR:
 ``` r
 # Create an artificial LD block
 LD_block <- 500:1000
-p[LD_block] <- rnorm(length(LD_block), mean = 0.8, sd = 0.02)
+p[LD_block] <- runif(length(LD_block), min = 0.78, max = 0.82)
 
 # Define weights (inverse LD)
 w <- rep(1.0, length(p))
