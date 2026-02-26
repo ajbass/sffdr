@@ -189,6 +189,10 @@ fpi0est <- function(
   z_fit <- z_valid[fit_idx, , drop = FALSE]
   w_fit <- if (!is.null(weights)) weights[valid_idx][fit_idx] else NULL
 
+  if (!is.null(w_fit)) {
+    w_fit <- pmin(pmax(w_fit, 1e-6), 1.0)
+  }
+
   # Build formula for binomial regression
   fm <- formula(paste("phi", paste(pi0_model, collapse = " ")))
 
@@ -581,6 +585,7 @@ pi0est_weighted <- function(
 
   if (!is.null(weights)) {
     weights <- weights[rm_na]
+    weights <- pmin(pmax(weights, 1e-6), 1.0)
   } else {
     weights <- rep(1.0, length(p))
   }

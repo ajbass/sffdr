@@ -166,6 +166,11 @@ sffdr <- function(
 
   # Handle inverse LD weights for density estimation
   w_valid <- if (!is.null(weights)) weights[valid] else NULL
+
+  if (!is.null(w_valid)) {
+    w_valid <- pmin(pmax(w_valid, 1e-6), 1.0)
+  }
+
   has_weights <- !is.null(w_valid) && !all(is.na(w_valid))
 
   if (has_weights && any(is.na(w_valid)) && verbose) {

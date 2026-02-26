@@ -104,7 +104,7 @@ pi0_model <- function(
     rank_vals <- rank_vals[valid_idx]
 
     w_vals <- if (!is.null(weights)) {
-      weights[valid_idx]
+      pmin(pmax(weights[valid_idx], 1e-6), 1.0)
     } else {
       rep(1.0, length(raw_vals))
     }
