@@ -256,9 +256,10 @@ fit_bivariate_density <- function(
     weights <- rep(1.0, nrow(train_s))
   }
 
-  # 2. Identify Signal vs Null
-  z <- train_s[, 2]
-  idx_tail <- which(z < tail_threshold)
+  # 2. Identify Signal vs Null — filter on matrix before data.frame construction
+  z_col <- train_s[, 2]
+  is_tail <- z_col < tail_threshold
+  idx_tail <- which(is_tail)
   n_tail <- length(idx_tail)
 
   if (n_tail == 0) {
@@ -270,27 +271,23 @@ fit_bivariate_density <- function(
 
   # 3. Downsample and Multiply Weights
   if (n_null > target_null) {
-    idx_null <- which(z >= tail_threshold)
-
+    idx_null <- which(!is_tail)
     idx_keep <- sample(idx_null, target_null)
-
     idx_final <- c(idx_tail, idx_keep)
     w_null <- n_null / target_null
-
     w_vec <- c(weights[idx_tail], weights[idx_keep] * w_null)
   } else {
     idx_final <- seq_len(n_total)
     w_vec <- weights
   }
 
-  # 4. Construct Data Frames
-  fit_data <- data.frame(
-    V1 = train_s[idx_final, 1],
-    V2 = train_s[idx_final, 2],
-    w = w_vec
-  )
+  # 4. Construct data.frame from pre-filtered matrix rows
+  mat_final <- train_s[idx_final, , drop = FALSE]
+  fit_data <- data.frame(V1 = mat_final[, 1], V2 = mat_final[, 2], w = w_vec)
 
-  valid_data <- fit_data[fit_data$V2 < tail_threshold, , drop = FALSE]
+  # valid_data: tail rows only — filter on numeric vector, not data.frame column
+  is_tail_final <- mat_final[, 2] < tail_threshold
+  valid_data <- fit_data[is_tail_final, , drop = FALSE]
 
   # 5. Adaptive Bandwidth Selection
   n_eff <- sum(fit_data$w)
@@ -411,12 +408,15 @@ fit_strategy_final <- function(
     p_lin <- exp(p_log)
     all(p_lin > 0)
   }
+  # Compute rbox() once and share across all strategies
+  ev_box <- rbox()
+
   strats <- list(
     list(
       name = "High-Res Tcub",
       deg = 2,
       kern = "tcub",
-      ev = rbox(),
+      ev = ev_box,
       nn = nn_high,
       h = h_safe
     ),
@@ -424,7 +424,7 @@ fit_strategy_final <- function(
       name = "High-Res Gauss",
       deg = 2,
       kern = "gauss",
-      ev = rbox(),
+      ev = ev_box,
       nn = nn_high,
       h = h_safe
     ),
@@ -432,7 +432,7 @@ fit_strategy_final <- function(
       name = "Safe Tcub",
       deg = 2,
       kern = "tcub",
-      ev = rbox(),
+      ev = ev_box,
       nn = nn_safe,
       h = 2 * h_safe
     ),
@@ -440,7 +440,7 @@ fit_strategy_final <- function(
       name = "Linear Tree",
       deg = 1,
       kern = "tcub",
-      ev = rbox(),
+      ev = ev_box,
       nn = 2 * nn_safe,
       h = 2 * h_safe
     )

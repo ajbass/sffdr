@@ -5,20 +5,21 @@
 #' adaptively selecting knots based on an FDR threshold.
 #'
 #' @param z Matrix/data.frame of p-values (rows=tests, cols=traits).
-#' @param indep_snps Logical vector indicating independent SNPs (training subset).
+#' @param indep_snps Logical, numeric, or character vector indicating independent SNPs (training subset).
 #'   If NULL, uses all tests. Default: NULL.
 #' @param weights Optional numeric vector of weights (e.g., inverse LD scores) for weighted spline fitting. Default: NULL.
 #' @param fdr_threshold FDR threshold for signal definition. Default: 0.25.
-#' @param min_discoveries Min (LD-independent) significant hits required to include trait. Default: 100.
+#' @param min_discoveries Min (LD-independent) significant hits required to include trait. Default: 150.
 #' @param n_knots Target knot count. Default: 5. Automatically reduced if insufficient
-#'   discoveries (via `min_snps_per_knot`) or capped by `max_knots`.
-#' @param min_snps_per_knot Min significant SNPs per knot interval. Default: 100. Note that this is the minimum independent SNPs required per knot interval if `indep_snps` is provided.
+#'   discoveries (via \code{min_snps_per_knot}) or capped by \code{max_knots}.
+#' @param min_snps_per_knot Base minimum significant SNPs per knot interval. Default: 100.
+#'   Dynamically scales up for larger datasets to prevent overfitting.
 #' @param verbose Print selection details. Default: TRUE.
 #' @param seed Optional seed for reproducibility. Default: 2026.
 #'
 #' @details
 #' Independent SNPs determine knot placement; all SNPs train the model to capture signal shape.
-#' For smaller datasets (<100K), consider reducing `min_snps_per_knot` and `min_discoveries` to improve knot placement.
+#' For smaller datasets (<100K), consider reducing \code{min_snps_per_knot} and \code{min_discoveries} to improve knot placement.
 #'
 #' @return List containing:
 #' \item{fmod}{Model formula (using \code{splines::ns})}
@@ -117,11 +118,37 @@ pi0_model <- function(
 
   n_total_snps <- nrow(z)
 
+  # Effective N: accounts for weights (sum of inverse LD scores = effective independent N)
+  # or indep_snps (count of independent SNPs), or raw N if neither provided
+  n_eff <- if (!is.null(weights)) {
+    sum(weights, na.rm = TRUE)
+  } else if (use_indep) {
+    sum(indep_snps, na.rm = TRUE)
+  } else {
+    n_total_snps
+  }
+
+  # Dynamic Knot Scaling: Scale required SNPs per knot with dataset size (up to 2500)
+  # Forces smaller datasets to require proportionally more evidence
+  min_snps_per_knot_eff <- max(
+    min_snps_per_knot,
+    min(2500, floor(n_eff * 0.02))
+  )
+
   if (verbose) {
+    eff_str <- if (n_eff != n_total_snps) {
+      sprintf(
+        " (Effective N = %s)",
+        formatC(round(n_eff), format = "d", big.mark = ",")
+      )
+    } else {
+      ""
+    }
     message(sprintf(
-      "  [Auto-Scale]: N = %d. Bandwidth set to %d independent SNPs per knot.",
-      n_total_snps,
-      min_snps_per_knot
+      "  [Auto-Scale]: N = %s%s. Bandwidth set to %d independent SNPs per knot.",
+      formatC(n_total_snps, format = "d", big.mark = ","),
+      eff_str,
+      min_snps_per_knot_eff
     ))
   }
 
@@ -206,7 +233,7 @@ pi0_model <- function(
         }
 
         max_safe_knots <- floor(
-          sum(basis_weights, na.rm = TRUE) / min_snps_per_knot
+          sum(basis_weights, na.rm = TRUE) / min_snps_per_knot_eff
         )
         n_knots_actual <- max(1, min(max_safe_knots, n_knots))
 
@@ -233,14 +260,42 @@ pi0_model <- function(
       }
     }
 
-    if (length(knot_locs) > 0) {
-      knot_locs <- c(knot_locs, 0.1) # null anchor
-    }
-
+    # Format the empirically discovered knots
     knot_locs <- unique(round(knot_locs, 7))
     knot_locs <- knot_locs[knot_locs < 0.9999]
     knot_locs <- sort(knot_locs)
 
+    # 1. Enforce minimum spacing tied dynamically to the effective knot requirement
+    # Floor of 0.001 allows tight bending for massive biobanks, avoiding human GWAS underfit
+    if (length(knot_locs) > 1) {
+      min_spacing <- max(0.001, min_snps_per_knot_eff / n_eff)
+      keep <- rep(TRUE, length(knot_locs))
+      last_kept <- 1L
+      for (j in 2:length(knot_locs)) {
+        if (knot_locs[j] - knot_locs[last_kept] < min_spacing) {
+          keep[j] <- FALSE
+          if (verbose) {
+            message(sprintf(
+              "  [%s]: Knot %.4f too close to %.4f (min spacing = %.4f). Removing.",
+              var_name,
+              knot_locs[j],
+              knot_locs[last_kept],
+              min_spacing
+            ))
+          }
+        } else {
+          last_kept <- j
+        }
+      }
+      knot_locs <- knot_locs[keep]
+    }
+
+    # 2. Add Null Anchor AFTER spacing enforcement to prevent accidental deletion
+    if (length(knot_locs) > 0) {
+      knot_locs <- unique(sort(c(knot_locs, 0.1)))
+    }
+
+    # 3. Apply density-based knot collapsing
     if (length(knot_locs) > 0 && (use_indep || !is.null(weights))) {
       is_indep_subset <- rep(TRUE, length(valid_indices_map))
 
@@ -257,7 +312,7 @@ pi0_model <- function(
       indep_ranks_subset <- rank_vals[is_indep_subset]
       indep_weights_subset <- w_vals[is_indep_subset]
 
-      min_indep_support <- min_snps_per_knot / 2
+      min_indep_support <- min_snps_per_knot_eff / 2
 
       repeat {
         if (length(knot_locs) == 0) {

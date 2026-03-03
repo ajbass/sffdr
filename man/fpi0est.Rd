@@ -15,6 +15,7 @@ fpi0est(
   constrained.p = TRUE,
   tol = 1e-09,
   maxit = 200,
+  ncores = 1L,
   verbose = TRUE,
   ...
 )
@@ -46,6 +47,10 @@ then you don't have to use the indep_snps argument, as the weights will effectiv
 \item{tol}{Numeric; convergence tolerance. Default is 1e-9.}
 
 \item{maxit}{Integer; maximum iterations. Default is 200.}
+
+\item{ncores}{Integer; number of cores for parallel lambda fitting via
+\code{parallel::mclapply}. Fork-based parallelism (Unix/macOS only) -
+on Windows this falls back to sequential execution. Default is 1L.}
 
 \item{verbose}{Logical; print progress messages. Default is TRUE.}
 

@@ -19,19 +19,20 @@ pi0_model(
 \arguments{
 \item{z}{Matrix/data.frame of p-values (rows=tests, cols=traits).}
 
-\item{indep_snps}{Logical vector indicating independent SNPs (training subset).
+\item{indep_snps}{Logical, numeric, or character vector indicating independent SNPs (training subset).
 If NULL, uses all tests. Default: NULL.}
 
 \item{weights}{Optional numeric vector of weights (e.g., inverse LD scores) for weighted spline fitting. Default: NULL.}
 
 \item{fdr_threshold}{FDR threshold for signal definition. Default: 0.25.}
 
-\item{min_discoveries}{Min (LD-independent) significant hits required to include trait. Default: 100.}
+\item{min_discoveries}{Min (LD-independent) significant hits required to include trait. Default: 150.}
 
-\item{min_snps_per_knot}{Min significant SNPs per knot interval. Default: 100. Note that this is the minimum independent SNPs required per knot interval if `indep_snps` is provided.}
+\item{min_snps_per_knot}{Base minimum significant SNPs per knot interval. Default: 100.
+Dynamically scales up for larger datasets to prevent overfitting.}
 
 \item{n_knots}{Target knot count. Default: 5. Automatically reduced if insufficient
-discoveries (via `min_snps_per_knot`) or capped by `max_knots`.}
+discoveries (via \code{min_snps_per_knot}) or capped by \code{max_knots}.}
 
 \item{verbose}{Print selection details. Default: TRUE.}
 
@@ -48,5 +49,5 @@ adaptively selecting knots based on an FDR threshold.
 }
 \details{
 Independent SNPs determine knot placement; all SNPs train the model to capture signal shape.
-For smaller datasets (<100K), consider reducing `min_snps_per_knot` and `min_discoveries` to improve knot placement.
+For smaller datasets (<100K), consider reducing \code{min_snps_per_knot} and \code{min_discoveries} to improve knot placement.
 }
