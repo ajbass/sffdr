@@ -85,6 +85,14 @@ Workflow:
 
 Surrogate Variable:
 If not specified, the estimated functional pi0 is used as the surrogate variable.
+
+Interpretation note: Functional p-values reflect the global ranking of all
+SNPs by the functional local FDR. A SNP with a small functional p-value but
+large flfdr (> 0.5) has weak individual evidence but ranks favorably
+relative to null SNPs. This happens when there is strong prior evidence (fpi0) of the SNP
+being non-null. Thus, users should also consider flfdr (and fqvalues) alongside fpvalues
+when assessing individual SNP evidence. SNPs with flfdr > 0.5 should
+be interpreted cautiously regardless of their functional p-value.
 }
 \examples{
 # Import data

@@ -9,7 +9,7 @@
 #'   If NULL, uses all tests. Default: NULL.
 #' @param weights Optional numeric vector of weights (e.g., inverse LD scores) for weighted spline fitting. Default: NULL.
 #' @param fdr_threshold FDR threshold for signal definition. Default: 0.25.
-#' @param min_discoveries Min significant hits required to include trait. Default: 2500.
+#' @param min_discoveries Min (LD-independent) significant hits required to include trait. Default: 100.
 #' @param n_knots Target knot count. Default: 5. Automatically reduced if insufficient
 #'   discoveries (via `min_snps_per_knot`) or capped by `max_knots`.
 #' @param min_snps_per_knot Min significant SNPs per knot interval. Default: 100. Note that this is the minimum independent SNPs required per knot interval if `indep_snps` is provided.
@@ -30,7 +30,7 @@ pi0_model <- function(
   indep_snps = NULL,
   weights = NULL,
   fdr_threshold = 0.25,
-  min_discoveries = 2500,
+  min_discoveries = 150,
   min_snps_per_knot = 100,
   n_knots = 5,
   verbose = TRUE,
@@ -70,13 +70,51 @@ pi0_model <- function(
   z_train_raw <- z
   z_train_ranked <- z_ranked
 
+  use_indep <- !is.null(indep_snps)
+  if (use_indep) {
+    if (is.logical(indep_snps) && length(indep_snps) != nrow(z)) {
+      warning(sprintf(
+        "Length mismatch: indep_snps (%d) vs z rows (%d). Ignoring indep_snps.",
+        length(indep_snps),
+        nrow(z)
+      ))
+      use_indep <- FALSE
+    } else if (is.numeric(indep_snps)) {
+      if (
+        any(indep_snps < 1, na.rm = TRUE) ||
+          any(indep_snps > nrow(z), na.rm = TRUE)
+      ) {
+        warning(
+          "Numeric indep_snps contains out-of-bounds indices. Ignoring indep_snps."
+        )
+        use_indep <- FALSE
+      }
+    } else if (is.character(indep_snps) && is.null(rownames(z))) {
+      warning(
+        "Character indep_snps provided, but input data 'z' has no rownames. Ignoring indep_snps."
+      )
+      use_indep <- FALSE
+    }
+  }
+
   if (verbose) {
     message("==================================================")
     message("Building Pi0 Model (Rank: Signal -> 0.0)")
     message(sprintf("  Variables        : %d", n_vars))
-    message(sprintf("  Min Discoveries  : %d (All SNPs)", min_discoveries))
+
+    discovery_type <- if (use_indep || !is.null(weights)) {
+      "(Effective Independent)"
+    } else {
+      "(Raw SNPs)"
+    }
+    message(sprintf(
+      "  Min Discoveries  : %d %s",
+      min_discoveries,
+      discovery_type
+    ))
     message("--------------------------------------------------")
   }
+
   n_total_snps <- nrow(z)
 
   if (verbose) {
@@ -115,16 +153,41 @@ pi0_model <- function(
     knot_locs <- numeric(0)
 
     if (!is.null(qobj)) {
-      # Identify discoveries in the FULL valid set
       is_sig <- qobj$qvalues <= fdr_threshold
-      n_sig <- sum(is_sig)
 
-      if (n_sig >= min_discoveries) {
+      # Compute effective discovery count
+      if (use_indep) {
+        is_indep_check <- logical(length(valid_indices_map))
+        if (is.logical(indep_snps)) {
+          is_indep_check <- indep_snps[valid_indices_map]
+        } else if (is.character(indep_snps)) {
+          is_indep_check <- rownames(z)[valid_indices_map] %in% indep_snps
+        } else {
+          is_indep_check <- valid_indices_map %in% indep_snps
+        }
+        n_sig_effective <- sum(is_sig & is_indep_check)
+      } else if (!is.null(weights)) {
+        n_sig_effective <- sum(w_vals[is_sig])
+      } else {
+        n_sig_effective <- sum(is_sig)
+      }
+
+      if (n_sig_effective >= min_discoveries) {
+        # Safety check: warn if large LD-inflated discovery set with no correction
+        if (sum(is_sig) > 10000 && !use_indep && is.null(weights)) {
+          warning(sprintf(
+            "High number of raw discoveries (%d) detected for %s without LD correction. Spline knots may overfit to massive LD blocks. Consider using 'indep_snps' or 'weights'.",
+            sum(is_sig),
+            var_name
+          ))
+        }
+
         if (verbose) {
           message(sprintf(
-            "  [%s]: Found %d discoveries (FDR < %.2f). Calculating knots...",
+            "  [%s]: Found %d %sdiscoveries (FDR < %.2f). Calculating knots...",
             var_name,
-            n_sig,
+            round(n_sig_effective),
+            if (use_indep || !is.null(weights)) "independent " else "",
             fdr_threshold
           ))
         }
@@ -132,31 +195,10 @@ pi0_model <- function(
         basis_ranks <- rank_vals[is_sig]
         basis_weights <- w_vals[is_sig]
 
-        if (!is.null(indep_snps)) {
-          is_indep <- logical(length(valid_indices_map))
+        if (use_indep) {
+          sig_indep_ranks <- rank_vals[is_sig & is_indep_check]
+          sig_indep_weights <- w_vals[is_sig & is_indep_check]
 
-          if (is.logical(indep_snps)) {
-            if (length(indep_snps) != nrow(z)) {
-              warning(sprintf(
-                "Length mismatch: indep_snps (%d) vs z rows (%d). Ignoring indep_snps.",
-                length(indep_snps),
-                nrow(z)
-              ))
-            } else {
-              is_indep <- indep_snps[valid_indices_map]
-            }
-          } else if (is.character(indep_snps) && !is.null(rownames(z))) {
-            current_names <- rownames(z)[valid_indices_map]
-            is_indep <- current_names %in% indep_snps
-          } else {
-            is_indep <- valid_indices_map %in% indep_snps
-          }
-
-          # Intersection: Significant AND Independent
-          sig_indep_ranks <- rank_vals[is_sig & is_indep]
-          sig_indep_weights <- w_vals[is_sig & is_indep]
-
-          # Only switch to robust basis if we have enough data points
           if (length(sig_indep_ranks) >= 30) {
             basis_ranks <- sig_indep_ranks
             basis_weights <- sig_indep_weights
@@ -168,9 +210,26 @@ pi0_model <- function(
         )
         n_knots_actual <- max(1, min(max_safe_knots, n_knots))
 
-        probs <- seq(0, 1, length.out = n_knots_actual + 1)
-        tail_knots <- quantile(basis_ranks, probs = probs)
-        knot_locs <- tail_knots[2:length(tail_knots)]
+        # WEIGHTED KNOT PLACEMENT: place knots at equal independent statistical mass
+        ord <- order(basis_ranks)
+        sorted_ranks <- basis_ranks[ord]
+        sorted_weights <- basis_weights[ord]
+
+        cum_w <- cumsum(sorted_weights)
+        if (cum_w[length(cum_w)] > 0) {
+          cum_w <- cum_w / cum_w[length(cum_w)]
+          probs <- seq(0, 1, length.out = n_knots_actual + 1)
+
+          tail_knots <- sapply(probs, function(p) {
+            idx <- which(cum_w >= p)[1]
+            if (is.na(idx)) {
+              sorted_ranks[length(sorted_ranks)]
+            } else {
+              sorted_ranks[idx]
+            }
+          })
+          knot_locs <- tail_knots[2:length(tail_knots)]
+        }
       }
     }
 
@@ -182,18 +241,14 @@ pi0_model <- function(
     knot_locs <- knot_locs[knot_locs < 0.9999]
     knot_locs <- sort(knot_locs)
 
-    if (length(knot_locs) > 0 && (!is.null(indep_snps) || !is.null(weights))) {
+    if (length(knot_locs) > 0 && (use_indep || !is.null(weights))) {
       is_indep_subset <- rep(TRUE, length(valid_indices_map))
 
-      if (!is.null(indep_snps)) {
-        is_indep_subset <- logical(length(valid_indices_map))
+      if (use_indep) {
         if (is.logical(indep_snps)) {
-          if (length(indep_snps) == nrow(z)) {
-            is_indep_subset <- indep_snps[valid_indices_map]
-          }
-        } else if (is.character(indep_snps) && !is.null(rownames(z))) {
-          curr_names <- rownames(z)[valid_indices_map]
-          is_indep_subset <- curr_names %in% indep_snps
+          is_indep_subset <- indep_snps[valid_indices_map]
+        } else if (is.character(indep_snps)) {
+          is_indep_subset <- rownames(z)[valid_indices_map] %in% indep_snps
         } else {
           is_indep_subset <- valid_indices_map %in% indep_snps
         }
@@ -222,18 +277,17 @@ pi0_model <- function(
           sum,
           na.rm = TRUE
         ))
-        counts[is.na(counts)] <- 0 # Handle empty bins
+        counts[is.na(counts)] <- 0
 
         if (all(counts >= min_indep_support)) {
           break
         }
 
         problem_bin_idx <- which.min(counts)
-
-        if (problem_bin_idx > length(knot_locs)) {
-          knot_to_remove <- length(knot_locs)
+        knot_to_remove <- if (problem_bin_idx > length(knot_locs)) {
+          length(knot_locs)
         } else {
-          knot_to_remove <- problem_bin_idx
+          problem_bin_idx
         }
 
         if (verbose) {
@@ -248,10 +302,11 @@ pi0_model <- function(
         knot_locs <- knot_locs[-knot_to_remove]
       }
     }
+
     calc_cutoff <- 10000 / length(raw_vals)
     if (length(knot_locs) < 1) {
-      tail_rank_cutoff <- max(calc_cutoff, 0.005) # Never go below 0.5% rank
-      tail_rank_cutoff <- min(max(calc_cutoff, 0.005), 0.1) # Cap at 10% rank
+      tail_rank_cutoff <- max(calc_cutoff, 0.005)
+      tail_rank_cutoff <- min(tail_rank_cutoff, 0.1)
       if (verbose) {
         message(sprintf(
           "  [%s]: Fallback -> 1 Knot at %.4f",
@@ -277,7 +332,6 @@ pi0_model <- function(
           model_type <- "Fallback"
         }
       }
-
       if (model_type == "Discovered") {
         message(sprintf(
           "  [%s]: Final Model -> Spline (%d knots: %s)",

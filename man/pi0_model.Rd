@@ -9,7 +9,7 @@ pi0_model(
   indep_snps = NULL,
   weights = NULL,
   fdr_threshold = 0.25,
-  min_discoveries = 2500,
+  min_discoveries = 150,
   min_snps_per_knot = 100,
   n_knots = 5,
   verbose = TRUE,
@@ -26,7 +26,7 @@ If NULL, uses all tests. Default: NULL.}
 
 \item{fdr_threshold}{FDR threshold for signal definition. Default: 0.25.}
 
-\item{min_discoveries}{Min significant hits required to include trait. Default: 2500.}
+\item{min_discoveries}{Min (LD-independent) significant hits required to include trait. Default: 100.}
 
 \item{min_snps_per_knot}{Min significant SNPs per knot interval. Default: 100. Note that this is the minimum independent SNPs required per knot interval if `indep_snps` is provided.}
 

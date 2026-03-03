@@ -1,41 +1,3 @@
-.fpvalues_raw <- function(lfdr) {
-  n <- length(lfdr)
-  p_out <- rep(NA_real_, n)
-  fdr_out <- rep(NA_real_, n)
-
-  rm_na <- !is.na(lfdr)
-  if (!any(rm_na)) {
-    return(list(fp = p_out, fq = fdr_out))
-  }
-
-  lfdr_clean <- lfdr[rm_na]
-  lfdr_clean[lfdr_clean > 1] <- 1
-
-  o <- order(lfdr_clean)
-  lfdr_sorted <- lfdr_clean[o]
-
-  # Calculate cumulative mean (FDR)
-  fdr_sorted <- cumsum(lfdr_sorted) / seq_along(lfdr_sorted)
-
-  # Rank proportion
-  rank_prop <- seq_along(lfdr_sorted) / length(lfdr_sorted)
-
-  # P-value calculation
-  p_sorted <- (fdr_sorted * rank_prop) / max(fdr_sorted)
-  p_sorted <- pmin(p_sorted, 1)
-
-  p_final <- numeric(length(lfdr_clean))
-  fdr_final <- numeric(length(lfdr_clean))
-
-  p_final[o] <- p_sorted
-  fdr_final[o] <- fdr_sorted
-
-  p_out[rm_na] <- p_final
-  fdr_out[rm_na] <- fdr_final
-
-  return(list(fp = p_out, fq = fdr_out))
-}
-
 #' @title
 #' Functional p-values
 #'
@@ -55,8 +17,8 @@ fpvalues <- function(lfdr, p = NULL) {
     stop("'lfdr' must be a numeric vector.")
   }
   if (is.null(p)) {
-    out <- .fpvalues_raw(lfdr)
-    return(out)
+    # create random ordering if p-values are not provided
+    p <- runif(length(lfdr))
   }
 
   if (length(lfdr) != length(p)) {
