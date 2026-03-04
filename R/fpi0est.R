@@ -383,6 +383,9 @@ fpi0est <- function(
     )
   }
 
+  # Apply floor to fpi0 predictions
+  fpi0_pred <- pmax(fpi0_pred, 0.01)
+
   # Fill results including NAs
   fpi0_out <- rep(1, length(p))
   fpi0_out[valid_idx] <- fpi0_pred
