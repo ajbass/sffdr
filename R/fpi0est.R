@@ -77,7 +77,7 @@
 #'   \item{lambda}{The selected optimal lambda value.}
 #' }
 #'
-#' @importFrom stats family predict model.matrix qnorm dnorm runif
+#' @importFrom stats pnorm cor family predict model.matrix qnorm dnorm runif
 #'   quantile na.pass optimize binomial dbinom formula fitted fitted.values
 #'   gaussian median model.frame model.offset model.weights napredict
 #'   delete.response terms .checkMFClasses .getXlevels dlogis plogis aggregate
