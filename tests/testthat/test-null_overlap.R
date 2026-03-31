@@ -69,38 +69,38 @@ sim_rnaseq <- function(
 # 1. estimate_rho_overlap
 # =================================================================
 
-test_that("estimate_rho_overlap: spearman recovers rho under global null", {
+test_that("estimate_rho_overlap: double_null recovers rho under global null", {
   dat <- sim_rnaseq(n = 20000L, pi0 = 1.0, rho = 0.25, seed = 1L)
   rho_hat <- estimate_rho_overlap(
     dat$z1,
     dat$z2,
     dat$p1,
     dat$p2,
-    method = "spearman"
+    method = "double_null"
   )
   expect_equal(rho_hat, dat$rho, tolerance = 0.05)
 })
 
-test_that("estimate_rho_overlap: spearman recovers rho with pi0=0.80", {
+test_that("estimate_rho_overlap: double_null recovers rho with pi0=0.80", {
   dat <- sim_rnaseq(n = 20000L, pi0 = 0.80, rho = 0.25, ncp = 3.0)
   rho_hat <- estimate_rho_overlap(
     dat$z1,
     dat$z2,
     dat$p1,
     dat$p2,
-    method = "spearman"
+    method = "double_null"
   )
   expect_equal(rho_hat, dat$rho, tolerance = 0.05)
 })
 
-test_that("estimate_rho_overlap: spearman recovers NEGATIVE rho", {
+test_that("estimate_rho_overlap: double_null recovers NEGATIVE rho", {
   dat <- sim_rnaseq(n = 20000L, pi0 = 0.80, rho = -0.25, ncp = 3.0)
   rho_hat <- estimate_rho_overlap(
     dat$z1,
     dat$z2,
     dat$p1,
     dat$p2,
-    method = "spearman"
+    method = "double_null"
   )
   # tolerance = 0.10: lfdr intersection attenuates negative rho similarly
   # to positive rho (~5-15% attenuation from range restriction)
@@ -131,7 +131,7 @@ test_that("estimate_rho_overlap: near-zero rho estimated near zero", {
     dat$z2,
     dat$p1,
     dat$p2,
-    method = "spearman"
+    method = "double_null"
   )
   expect_lt(abs(rho_hat), 0.10)
 })
@@ -147,7 +147,7 @@ test_that("estimate_rho_overlap: high rho=0.5 recovers within tolerance and warn
       dat$z2,
       dat$p1,
       dat$p2,
-      method = "spearman"
+      method = "double_null"
     )
   )
   # tolerance = 0.15: attenuation increases at high rho due to
@@ -174,7 +174,13 @@ test_that("estimate_rho_overlap: recovers rho across range 0.05-0.40", {
 
     # Supress warnings here ONLY to keep the loop clean, as >0.3 is tested above
     rho_hat <- suppressWarnings(
-      estimate_rho_overlap(dat$z1, dat$z2, dat$p1, dat$p2, method = "spearman")
+      estimate_rho_overlap(
+        dat$z1,
+        dat$z2,
+        dat$p1,
+        dat$p2,
+        method = "double_null"
+      )
     )
     # Tolerance scales with rho: higher rho -> more attenuation
     # from lfdr > 0.5 filter restricting the range of z-scores

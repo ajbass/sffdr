@@ -10,7 +10,7 @@ estimate_rho_overlap(
   p1,
   p2,
   lfdry = NULL,
-  method = "spearman",
+  method = "double_null",
   thresh = 0.5
 )
 }
@@ -25,13 +25,13 @@ for \code{method = "weighted_cov"}).}
 \item{method}{Character; the estimation strategy to use:
 \itemize{
   \item \code{"weighted_cov"}: Weighted least squares via lfdr.
-  \item \code{"spearman"}: Rank correlation on the double-null stratum.
+  \item \code{"double_null"}: Pearson correlation strictly on the double-null stratum.
   \item \code{"mom_scaled"}: Method of moments (scaled lambdas).
   \item \code{"mom_rank"}: Method of moments (rank-normalised).
 }}
 
-\item{thresh}{Numeric scalar; p-value threshold for defining the double-null
-stratum in the \code{"spearman"} method. Default is 0.5.}
+\item{thresh}{Numeric scalar; lfdr threshold for defining the double-null
+stratum in the \code{"double_null"} method. Default is 0.5.}
 }
 \value{
 Numeric scalar representing the estimated overlap correlation.

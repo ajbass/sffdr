@@ -4,6 +4,7 @@
 
 * Added monotonicity option (running min or PAVA)
 * Better handling of weights in kernel density estimation
+* function docorrelate_informative to handle overlapping samples
 
 # sffdr 1.1.1
 

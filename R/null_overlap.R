@@ -1,3 +1,120 @@
+#' Discover Empirical Negative Controls
+#'
+#' Uses marginal local FDRs to dynamically identify genes that are highly
+#' likely to be null in both traits, serving as empirical negative controls
+#' for batch effect/overlap correlation estimation.
+#'
+#' @param p1 Numeric vector; primary trait p-values.
+#' @param p2 Numeric vector; surrogate trait p-values.
+#' @param threshold Numeric; the lfdr threshold for confidence (default 0.95).
+#' @param min_genes Integer; the minimum number of nulls required for a stable
+#'   covariance estimate.
+#'
+#' @return Integer vector of indices representing empirical null genes.
+#' @export
+discover_empirical_nulls <- function(
+  p1,
+  p2,
+  threshold = 0.95,
+  min_genes = 500
+) {
+  # 1. Compute marginal local FDRs safely
+  lfdr1 <- tryCatch(
+    qvalue::lfdr(
+      p1,
+      eps = 1e-25,
+      monotone = TRUE,
+      transf = "probit",
+      trunc = TRUE
+    ),
+    error = function(e) rep(1, length(p1))
+  )
+  lfdr2 <- tryCatch(
+    qvalue::lfdr(
+      p2,
+      eps = 1e-25,
+      monotone = TRUE,
+      transf = "probit",
+      trunc = TRUE
+    ),
+    error = function(e) rep(1, length(p2))
+  )
+
+  # 2. Intersect the high-confidence nulls
+  empirical_null_idx <- which(lfdr1 > threshold & lfdr2 > threshold)
+
+  # 3. Dynamic Fallback
+  if (length(empirical_null_idx) < min_genes) {
+    warning(sprintf(
+      "Only %d double-nulls found at strict threshold %.2f. Relaxing to top %d most 'null-like' genes.",
+      length(empirical_null_idx),
+      threshold,
+      min_genes
+    ))
+    combined_lfdr <- lfdr1 * lfdr2
+    empirical_null_idx <- order(combined_lfdr, decreasing = TRUE)[seq_len(
+      min_genes
+    )]
+  }
+
+  return(empirical_null_idx)
+}
+
+#' Run Overlap Correction using Data-Driven Nulls
+#'
+#' @param z1 Numeric vector; primary trait z-scores.
+#' @param z2 Numeric vector; surrogate trait z-scores.
+#' @param p1 Numeric vector; primary trait p-values.
+#' @param p2 Numeric vector; surrogate trait p-values.
+#'
+#' @return A list containing the estimated rho_o, the conditional f0 density,
+#'   and the indices of the empirical nulls used.
+#' @export
+run_empirical_overlap_correction <- function(z1, z2, p1, p2) {
+  cat("Discovering empirical double-null genes...\n")
+  empirical_nulls <- discover_empirical_nulls(p1, p2)
+  cat(sprintf(
+    "Isolated %d empirical negative controls.\n",
+    length(empirical_nulls)
+  ))
+
+  rho_hat_obj <- estimate_rho_mom(
+    z1 = z1,
+    z2 = z2,
+    p1 = p1,
+    p2 = p2,
+    neg_controls = empirical_nulls
+  )
+  safe_rho_o <- rho_hat_obj$rho_hat
+  cat(sprintf("Estimated batch/overlap rho_o: %.3f\n", safe_rho_o))
+
+  lfdry <- tryCatch(
+    qvalue::lfdr(
+      p2,
+      eps = 1e-25,
+      monotone = TRUE,
+      transf = "probit",
+      trunc = TRUE
+    ),
+    error = function(e) rep(1, length(p2))
+  )
+
+  cat("Computing conditional null density...\n")
+  cond_f0 <- overlap_null_density(
+    z1 = z1,
+    z2 = z2,
+    lfdry = lfdry,
+    rho_o = safe_rho_o,
+    empirical_null_var = TRUE
+  )
+
+  list(
+    rho_o = safe_rho_o,
+    f0 = cond_f0,
+    empirical_null_indices = empirical_nulls
+  )
+}
+
 #' Soft whitening of informative trait z-scores
 #'
 #' Removes overlap-induced correlation from informative trait z-scores (`z_y`)
@@ -94,7 +211,7 @@ decorrelate_informative <- function(
       z_y[valid],
       p_x[valid],
       p_y[valid],
-      method = "spearman"
+      method = "double_null"
     )
   }
 
@@ -144,12 +261,12 @@ decorrelate_informative <- function(
 #' @param method Character; the estimation strategy to use:
 #'               \itemize{
 #'                 \item \code{"weighted_cov"}: Weighted least squares via lfdr.
-#'                 \item \code{"spearman"}: Rank correlation on the double-null stratum.
+#'                 \item \code{"double_null"}: Pearson correlation strictly on the double-null stratum.
 #'                 \item \code{"mom_scaled"}: Method of moments (scaled lambdas).
 #'                 \item \code{"mom_rank"}: Method of moments (rank-normalised).
 #'               }
-#' @param thresh Numeric scalar; p-value threshold for defining the double-null
-#'               stratum in the \code{"spearman"} method. Default is 0.5.
+#' @param thresh Numeric scalar; lfdr threshold for defining the double-null
+#'               stratum in the \code{"double_null"} method. Default is 0.5.
 #'
 #' @return Numeric scalar representing the estimated overlap correlation.
 #' @export
@@ -159,15 +276,14 @@ estimate_rho_overlap <- function(
   p1,
   p2,
   lfdry = NULL,
-  method = "spearman",
+  method = "double_null",
   thresh = 0.5
 ) {
   method <- match.arg(
     method,
-    c("weighted_cov", "spearman", "mom_scaled", "mom_rank")
+    c("weighted_cov", "double_null", "mom_scaled", "mom_rank")
   )
 
-  # FIX 1: Restore the numeric type validation
   if (!is.numeric(z1)) {
     stop("'z1' must be a numeric vector.")
   }
@@ -207,7 +323,6 @@ estimate_rho_overlap <- function(
     lfdry <- lfdry[valid]
   }
 
-  # FIX 2: Early exit if there isn't enough data left to compute correlation
   if (length(z1) < 2) {
     return(NA_real_)
   }
@@ -224,7 +339,7 @@ estimate_rho_overlap <- function(
     w_var <- sum(w * (z2 - mx)^2)
     rho_o <- if (w_var > 1e-8) w_cov / w_var else 0
     rho_o <- max(min(rho_o, 0.99), -0.99)
-  } else if (method == "spearman") {
+  } else if (method == "double_null") {
     lfdr1 <- tryCatch(
       qvalue::lfdr(
         p1,
@@ -248,9 +363,10 @@ estimate_rho_overlap <- function(
 
     lfdr1 <- pmin(pmax(lfdr1, 0), 1)
     lfdr2 <- pmin(pmax(lfdr2, 0), 1)
-    null_idx <- which(lfdr1 > 0.5 & lfdr2 > 0.5)
 
-    # FIX 3: Only warn about low counts if the original input was large enough to expect it
+    # The > threshold filter inherently removes the heavy tails
+    null_idx <- which(lfdr1 > thresh & lfdr2 > thresh)
+
     if (length(null_idx) < 1000 && length(z1) >= 1000) {
       warning(
         "Fewer than 1,000 double-null genes found. Estimate may be imprecise."
@@ -261,6 +377,7 @@ estimate_rho_overlap <- function(
       warning("Too few null genes for correlation. Returning 0.")
       rho_o <- 0
     } else {
+      # Use Pearson directly on the well-behaved null core
       rho_o <- cor(
         z1[null_idx],
         z2[null_idx],
@@ -278,18 +395,17 @@ estimate_rho_overlap <- function(
     rho_o <- estimate_rho_mom(z1, z2, p1, p2, pi0_method = pi0_method)$rho_hat
   }
 
-  rho_o
+  return(rho_o)
 }
 
 #' Estimate overlap correlation via method of moments
 #'
 #' @param z1,z2        Numeric vectors; z-scores.
 #' @param p1,p2        Numeric vectors; p-values.
-#' @param neg_controls Integer vector; indices of known null genes. If provided,
-#'                     bypasses MOM and estimates correlation directly.
-#' @param pi0_method   Character; method for joint pi0 estimation
-#'                     ("2d_storey_scaled", "2d_storey_rank", or "product").
+#' @param neg_controls Integer vector; indices of known null genes.
+#' @param pi0_method   Character; method for joint pi0 estimation.
 #' @param ...          Additional arguments passed to \code{estimate_pi0_joint}.
+#' @noRd
 estimate_rho_mom <- function(
   z1,
   z2,
@@ -341,13 +457,7 @@ estimate_rho_mom <- function(
 
 #' Estimate joint null proportion (pi0)
 #'
-#' @param p1,p2     Numeric vectors; p-values.
-#' @param lambdas   Numeric vector; tuning parameters for the pi0 spline fit.
-#' @param method    Character; \code{"scaled"} (study-specific thresholds) or
-#'                  \code{"rank"} (uniform marginals).
-#' @param spline_df Integer; degrees of freedom for the smoothing spline.
-#' @param min_n     Integer; minimum observations required per stratum.
-#' @param plot      Logical; whether to plot the spline fit (currently unused).
+#' @noRd
 estimate_pi0_joint <- function(
   p1,
   p2,
@@ -371,8 +481,6 @@ estimate_pi0_joint <- function(
     pi0_2 <- qvalue::qvalue(p2)$pi0
     lam1_seq <- pmin(lambdas + (1 - lambdas) * (1 - pi0_1), 0.95)
     lam2_seq <- pmin(lambdas + (1 - lambdas) * (1 - pi0_2), 0.95)
-  } else {
-    stop("method must be 'scaled' or 'rank'")
   }
 
   pi0_seq <- mapply(
@@ -396,10 +504,14 @@ estimate_pi0_joint <- function(
   pi0_use <- pi0_seq[keep]
 
   spl <- smooth.spline(lam_use, pi0_use, df = spline_df)
-  pi0_est <- min(
-    max(min(predict(spl, lam_use[lam_use > median(lam_use)])$y), 0.0),
-    1.0
-  )
+
+  upper <- lam_use > median(lam_use)
+  if (sum(upper) == 0) {
+    pi0_est <- min(predict(spl, lam_use)$y)
+  } else {
+    pi0_est <- min(predict(spl, lam_use[upper])$y)
+  }
+  pi0_est <- max(min(pi0_est, 1.0), 0.0)
 
   list(
     pi0_joint = pi0_est,
@@ -410,4 +522,96 @@ estimate_pi0_joint <- function(
     lam2_seq = lam2_seq,
     method = method
   )
+}
+
+
+#' Compute conditional null density under sample overlap
+#'
+#' Computes the conditional null density f(z1 | H1=0, z2) for a primary
+#' trait (z1) given a surrogate trait (z2) when the two studies share samples.
+#'
+#' @param z1 Numeric vector; z-scores for the primary trait.
+#' @param z2 Numeric vector; z-scores for the surrogate trait.
+#' @param lfdry Numeric vector; marginal local FDR of the surrogate trait.
+#' @param rho_o Numeric scalar; expected sample overlap correlation. If \code{NULL}
+#'   (default), it is estimated internally via \code{estimate_rho_overlap}.
+#' @param p1 Numeric vector; primary trait p-values. Required if \code{rho_o = NULL}.
+#' @param p2 Numeric vector; surrogate trait p-values. Required if \code{rho_o = NULL}.
+#' @param se2 Numeric vector; standard errors of the surrogate trait effects.
+#'   If provided, enables per-variant Empirical Bayes shrinkage (recommended for GWAS).
+#'   If NULL, uses global shrinkage (recommended for RNA-seq).
+#' @param empirical_null_var Logical; if TRUE (default), estimates null variance
+#'   empirically from the double-null center to absorb genomic inflation.
+#' @param ... Additional arguments passed to \code{estimate_rho_overlap}.
+#'
+#' @return A numeric vector representing the conditional null density for each
+#'   observation. Pass this to the \code{f0} argument of \code{sffdr}.
+#'
+#' @export
+overlap_null_density <- function(
+  z1,
+  z2,
+  lfdry,
+  rho_o = NULL,
+  p1 = NULL,
+  p2 = NULL,
+  se2 = NULL,
+  empirical_null_var = TRUE,
+  ...
+) {
+  if (is.null(rho_o)) {
+    if (is.null(p1) || is.null(p2)) {
+      stop(
+        "If `rho_o` is NULL, `p1` and `p2` must be provided to estimate it dynamically."
+      )
+    }
+    rho_o <- estimate_rho_overlap(
+      z1,
+      z2,
+      p1,
+      p2,
+      lfdry = lfdry,
+      method = "double_null",
+      ...
+    )
+  }
+
+  if (!is.null(se2)) {
+    W_hat <- max(mean((z2^2 - 1) * se2^2, na.rm = TRUE), 1e-4)
+    r <- W_hat / (W_hat + se2^2)
+  } else {
+    sigma_s2_z <- max(mean(z2^2, na.rm = TRUE) - 1, 0)
+    r <- sigma_s2_z / (sigma_s2_z + 1)
+  }
+
+  w_sum <- sum(lfdry, na.rm = TRUE)
+  mx <- sum(lfdry * z2, na.rm = TRUE) / w_sum
+  my <- sum(lfdry * z1, na.rm = TRUE) / w_sum
+
+  z2_centered <- z2 - mx
+  mean_null <- rho_o * z2_centered + my
+  mean_signal <- rho_o * (1 - r) * z2_centered + my
+
+  var_theoretical <- 1 - rho_o^2
+
+  if (empirical_null_var) {
+    resid <- z1 - mean_null
+    var_null <- if (length(resid) > 30) {
+      (mad(resid, na.rm = TRUE))^2
+    } else {
+      var_theoretical
+    }
+    var_null <- max(var_null, var_theoretical, 0.1)
+  } else {
+    var_null <- var_theoretical
+  }
+
+  var_signal <- pmax(1 - rho_o^2 * (1 - r), 0.1)
+
+  mean_mix <- lfdry * mean_null + (1 - lfdry) * mean_signal
+  var_within <- lfdry * var_null + (1 - lfdry) * var_signal
+  var_between <- lfdry * (1 - lfdry) * (mean_null - mean_signal)^2
+  var_mix <- pmax(var_within + var_between, 1e-6)
+
+  dnorm(z1, mean = mean_mix, sd = sqrt(var_mix))
 }
