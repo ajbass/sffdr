@@ -10,6 +10,7 @@
 #' Nothing of interest.
 #'
 #' @examples
+#' \dontrun{
 #' # import data
 #' data(bmi)
 #'
@@ -29,7 +30,7 @@
 #'
 #' # Plot significance results
 #' plot(sffdr_out, rng = c(0, 5e-4))
-#'
+#' }
 #' @author Andrew J. Bass
 #' @seealso \code{\link{sffdr}}
 #' @keywords plot

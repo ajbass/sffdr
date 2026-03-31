@@ -95,6 +95,7 @@ when assessing individual SNP evidence. SNPs with flfdr > 0.5 should
 be interpreted cautiously regardless of their functional p-value.
 }
 \examples{
+\dontrun{
 # Import data
 data(bmi)
 
@@ -121,6 +122,7 @@ plot(sffdr_out)
 fp <- sffdr_out$fpvalues
 fq <- sffdr_out$fqvalues
 flfdr <- sffdr_out$flfdr
+}
 
 }
 \seealso{

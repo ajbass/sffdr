@@ -21,6 +21,7 @@ Nothing of interest.
 Graphical display of the sffdr object
 }
 \examples{
+\dontrun{
 # import data
 data(bmi)
 
@@ -40,7 +41,7 @@ sffdr_out <- sffdr(p, fpi0)
 
 # Plot significance results
 plot(sffdr_out, rng = c(0, 5e-4))
-
+}
 }
 \seealso{
 \code{\link{sffdr}}

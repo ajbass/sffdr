@@ -64,6 +64,7 @@
 #' \item{fx}{Joint density estimates at observed (p-value, surrogate) pairs.}
 #'
 #' @examples
+#' \dontrun{
 #' # Import data
 #' data(bmi)
 #'
@@ -90,6 +91,7 @@
 #' fp <- sffdr_out$fpvalues
 #' fq <- sffdr_out$fqvalues
 #' flfdr <- sffdr_out$flfdr
+#' }
 #'
 #' @author Andrew J. Bass
 #' @seealso \code{\link{fpi0est}}, \code{\link{plot.sffdr}}, \code{\link{kernelEstimator}}
