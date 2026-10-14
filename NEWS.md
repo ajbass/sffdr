@@ -1,5 +1,17 @@
 # sffdr (development version)
 
+* `decorrelate_informative()` now removes the primary's noise from the
+  informative studies exactly, (z_y - rho z_x) / sqrt(1 - rho^2), instead of
+  scaling the correction by the primary's local FDR, which left part of the
+  overlap in the covariates and inflated false discoveries at larger overlap.
+  It takes several informative studies at once and, without `rho_o`, estimates
+  the overlap with the new `estimate_overlap()`. `p_x`, `p_y` and `lfdr_x` are
+  no longer used.
+* New `estimate_overlap()`: the null correlation of z-scores between studies
+  from their products near zero.
+* `overlap_null_density()`, `run_empirical_overlap_correction()`,
+  `estimate_rho_overlap()` and `discover_empirical_nulls()` are defunct.
+
 # sffdr 1.1.2
 
 * Added monotonicity option (running min or PAVA)

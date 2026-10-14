@@ -154,6 +154,10 @@ sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, weights = w)
 
   **Note on incorporating LD scores**: As LD scores are available for common reference panels (e.g., 1000 Genomes), they can be easily downloaded to use in sfFDR. If you have LD scores calculated from your data then that's even better. However, it is problematic to use LD scores when the reference panel is not matched to your study population. In that case, the pruning (or informative sampling) strategy discussed above is the best option.
 
+### Sample overlap with the informative studies
+
+If the primary and informative studies share participants (e.g., traits measured in the same biobank), pass the signed informative z-scores through `decorrelate_informative()` and use its p-values (`$p2`) as the informative p-values in `pi0_model()`; the primary p-values are used unchanged (see `?decorrelate_informative`).
+
 ### Manual Knot Selection and using other informative variables
 
 The selection of knots in the B-spline basis is an important tuning parameter in sffdr. If your surrogate GWAS has extremely high power (very small p-values), we recommend placing more knots at the lower end of the p-value distribution to capture the local density of signals.
