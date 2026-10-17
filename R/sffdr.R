@@ -24,6 +24,18 @@
 #' Surrogate Variable:
 #' If not specified, the estimated functional pi0 is used as the surrogate variable.
 #'
+#' Weights and LD:
+#' The joint density is estimated over all tested SNPs, which is the set the
+#' functional p-values count errors in, so \code{sffdr()} no longer reweights
+#' it. Inverse-LD weights change the density to that of independent signals;
+#' because associated SNPs have larger LD scores, this biases the local FDR
+#' (conservative with inverse-LD weights, anti-conservative with weights that
+#' are larger at associated SNPs). LD scores carry information about
+#' association, so their place is the functional pi0 model, as a covariate
+#' (see the vignette); as inverse weights they remain available in
+#' \code{\link{pi0_model}} and \code{\link{fpi0est}} in place of an LD-pruned
+#' training set.
+#'
 #' Interpretation note: Functional p-values reflect the global ranking of all
 #' SNPs by the functional local FDR. A SNP with a small functional p-value but
 #' large flfdr (> 0.5) has weak individual evidence but ranks favorably
@@ -38,7 +50,8 @@
 #' @param surrogate Optional numeric vector (same length as \code{p.value}) used
 #'   as a surrogate variable for compression. If NULL (default), uses
 #'   \code{fpi0} as the surrogate.
-#' @param weights Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores.
+#' @param weights Ignored, with a warning (kept for compatibility with sffdr
+#'   1.1.2); see Details.
 #' @param epsilon Numeric; lower bound for p-value clamping during density estimation.
 #'   Default is \code{.Machine$double.xmin}.
 #' @param nn Numeric; nearest-neighbor bandwidth for \code{\link{kernelEstimator}}.
@@ -174,20 +187,12 @@ sffdr <- function(
   fpi0_valid <- fpi0[valid]
   n_valid <- sum(valid)
 
-  # Handle inverse LD weights for density estimation
-  w_valid <- if (!is.null(weights)) weights[valid] else NULL
-
-  if (!is.null(w_valid)) {
-    w_valid <- pmin(pmax(w_valid, 1e-6), 1.0)
-  }
-
-  has_weights <- !is.null(w_valid) && !all(is.na(w_valid))
-
-  if (has_weights && any(is.na(w_valid)) && verbose) {
-    message(sprintf(
-      "  Note: Weights missing for %.1f%% of SNPs. Training map on weighted subset...",
-      100 * mean(is.na(w_valid))
-    ))
+  # Weights no longer enter the density: it is estimated over all tested SNPs
+  if (!is.null(weights)) {
+    warning(
+      "sffdr: 'weights' are ignored; the density is estimated over all tested SNPs. ",
+      "Use 'weights' in pi0_model() and fpi0est(), or include the LD score as a covariate."
+    )
   }
 
   # Set surrogate variable
@@ -205,46 +210,16 @@ sffdr <- function(
     message("  Fitting kernel density...")
   }
 
-  if (has_weights) {
-    # Weighted density estimation
-    train_idx <- !is.na(w_valid)
-    kd <- kernelEstimator(
-      x = cbind(z[train_idx], p_valid[train_idx]),
-      eval.points = cbind(z, p_valid), # Predict for ALL valid SNPs
-      nn = nn,
-      epsilon = epsilon,
-      weights = w_valid[train_idx],
-      verbose = verbose,
-      ...
-    )
-
-    # Marginal density of Z (1D weighted correction)
-    fx_uni <- kernelEstimator(
-      x = z[train_idx],
-      eval.points = z,
-      nn = nn,
-      epsilon = epsilon,
-      weights = w_valid[train_idx],
-      verbose = verbose,
-      ...
-    )
-
-    fx_valid <- pmax(kd$fx, .Machine$double.xmin)
-    marginal_fz <- pmax(fx_uni$fx, .Machine$double.xmin)
-  } else {
-    # Unweighted density estimation
-    kd <- kernelEstimator(
-      x = cbind(z, p_valid),
-      eval.points = cbind(z, p_valid),
-      nn = nn,
-      epsilon = epsilon,
-      weights = NULL,
-      verbose = verbose,
-      ...
-    )
-    fx_valid <- pmax(kd$fx, .Machine$double.xmin)
-    marginal_fz <- 1
-  }
+  kd <- kernelEstimator(
+    x = cbind(z, p_valid),
+    eval.points = cbind(z, p_valid),
+    nn = nn,
+    epsilon = epsilon,
+    weights = NULL,
+    verbose = verbose,
+    ...
+  )
+  fx_valid <- pmax(kd$fx, .Machine$double.xmin)
 
   if (monotone) {
     if (verbose) {
@@ -255,11 +230,8 @@ sffdr <- function(
       message(msg)
     }
 
-    # Calculate Effective N (accounting for LD weights)
-    eff_n <- if (!is.null(weights)) sum(w_valid, na.rm = TRUE) else n_valid
-
-    # Target ~1,000 independent SNPs per bin
-    n_bins <- as.integer(max(10, min(1000, floor(eff_n / 1000))))
+    # Target ~1,000 SNPs per bin
+    n_bins <- as.integer(max(10, min(1000, floor(n_valid / 1000))))
 
     if (verbose) {
       message(sprintf(
@@ -295,7 +267,7 @@ sffdr <- function(
     message("  Computing functional local FDRs...")
   }
 
-  lfdr_valid <- pmin(fpi0_valid * marginal_fz / fx_valid, 1)
+  lfdr_valid <- pmin(fpi0_valid / fx_valid, 1)
 
   # Compute functional p-values and q-values
   if (verbose) {

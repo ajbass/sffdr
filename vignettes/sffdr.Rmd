@@ -134,23 +134,28 @@ While this provides robustness in the null region, users should note it may resu
 
 ### Incorporating LD scores
 
-If LD scores ($l_{j}$​) are available (e.g., from LDSC regression), they can be utilized as inverse-weights ($w_j​=1/l_{j}$​). This allows the estimators to account for LD directly while allowing the full dataset to be used. As such, pre-filtering for independent SNPs (LD-pruning) is unnecessary.
+If LD scores ($l_{j}$) are available (e.g., from LDSC regression), there are two ways to use them.
 
-Below we show how to incorporate weights into sfFDR:
+1. **As a covariate.** SNPs with larger LD scores tag more variation and are more often associated, so the LD score is informative about association and belongs in the functional $\pi_{0}$ model alongside the informative traits:
+
 ```{r, eval = FALSE}
-# Create an artificial LD block
-LD_block <- 500:1000
-p[LD_block] <- runif(length(LD_block), min = 0.78, max = 0.82)
+# LD score (log scale) added to the pi0 model built by pi0_model()
+zt <- cbind(mpi0$zt, ld = log(ld_score))
+fmod <- update(mpi0$fmod, ~ . + ns(ld, df = 3))
+fpi0 <- fpi0est(p, z = zt, pi0_model = fmod, indep_snps = indep_snps)
+sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
+```
 
-# Define weights (inverse LD)
-w <- rep(1.0, length(p))
-w[LD_block] <- 0.05
+2. **As inverse weights in the $\pi_{0}$ fit** ($w_j = 1/l_{j}$), in place of LD pruning:
 
-# Apply sfFDR with weights
+```{r, eval = FALSE}
+w <- 1 / ld_score
 mpi0 <- pi0_model(z, weights = w)
 fpi0 <- fpi0est(p, mpi0, weights = w)
-sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, weights = w)
+sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
 ```
+
+`sffdr()` itself does not use weights: its density is estimated over all tested SNPs, which is the set the functional p-values count errors in, and reweighting that density biases the local FDR (SNPs in LD are each tested, so each counts).
 
   **Note on incorporating LD scores**: As LD scores are available for common reference panels (e.g., 1000 Genomes), they can be easily downloaded to use in sfFDR. If you have LD scores calculated from your data then that's even better. However, it is problematic to use LD scores when the reference panel is not matched to your study population. In that case, the pruning (or informative sampling) strategy discussed above is the best option.
 

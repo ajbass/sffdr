@@ -1,4 +1,4 @@
-# sffdr (development version)
+# sffdr 1.1.3
 
 * `decorrelate_informative()` now removes the primary's noise from the
   informative studies exactly, (z_y - rho z_x) / sqrt(1 - rho^2), instead of
@@ -11,6 +11,14 @@
   from their products near zero.
 * `overlap_null_density()`, `run_empirical_overlap_correction()`,
   `estimate_rho_overlap()` and `discover_empirical_nulls()` are defunct.
+* `sffdr()` no longer uses `weights` (a warning is given). Its density is
+  estimated over all tested SNPs, the set the functional p-values count errors
+  in; reweighting it by inverse LD scores biased the local FDR, because
+  associated SNPs have larger LD scores (conservative with inverse-LD weights,
+  anti-conservative with weights larger at associated SNPs). LD scores belong
+  in the functional pi0 model as a covariate; inverse-LD weights remain
+  available in `pi0_model()` and `fpi0est()` in place of LD pruning. Results
+  without `weights` are unchanged.
 
 # sffdr 1.1.2
 

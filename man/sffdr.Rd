@@ -29,7 +29,8 @@ from \code{\link{fpi0est}}. Values must be in [0, 1].}
 as a surrogate variable for compression. If NULL (default), uses
 \code{fpi0} as the surrogate.}
 
-\item{weights}{Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores.}
+\item{weights}{Ignored, with a warning (kept for compatibility with sffdr
+1.1.2); see Details.}
 
 \item{epsilon}{Numeric; lower bound for p-value clamping during density estimation.
 Default is \code{.Machine$double.xmin}.}
@@ -85,6 +86,18 @@ Workflow:
 
 Surrogate Variable:
 If not specified, the estimated functional pi0 is used as the surrogate variable.
+
+Weights and LD:
+The joint density is estimated over all tested SNPs, which is the set the
+functional p-values count errors in, so \code{sffdr()} no longer reweights
+it. Inverse-LD weights change the density to that of independent signals;
+because associated SNPs have larger LD scores, this biases the local FDR
+(conservative with inverse-LD weights, anti-conservative with weights that
+are larger at associated SNPs). LD scores carry information about
+association, so their place is the functional pi0 model, as a covariate
+(see the vignette); as inverse weights they remain available in
+\code{\link{pi0_model}} and \code{\link{fpi0est}} in place of an LD-pruned
+training set.
 
 Interpretation note: Functional p-values reflect the global ranking of all
 SNPs by the functional local FDR. A SNP with a small functional p-value but

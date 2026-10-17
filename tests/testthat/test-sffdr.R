@@ -230,3 +230,20 @@ test_that("sffdr gracefully handles data with ZERO true signals (Pure Null)", {
   # 3. Assert no missing values
   expect_false(any(is.na(res_mono$fx)))
 })
+
+test_that("sffdr ignores weights with a warning and matches the unweighted fit", {
+  set.seed(7)
+  n <- 5000
+  p <- c(runif(n - 200), 10^-runif(200, 2, 8))
+  fpi0 <- runif(n, 0.8, 0.95)
+  w <- 1 / rlnorm(n, 3, 0.5)
+
+  ref <- sffdr(p, fpi0, verbose = FALSE)
+  expect_warning(
+    res <- sffdr(p, fpi0, weights = w, verbose = FALSE),
+    "weights"
+  )
+  expect_equal(res$fpvalues, ref$fpvalues)
+  expect_equal(res$fqvalues, ref$fqvalues)
+  expect_equal(res$flfdr, ref$flfdr)
+})
