@@ -36,6 +36,19 @@
 #' \code{\link{pi0_model}} and \code{\link{fpi0est}} in place of an LD-pruned
 #' training set.
 #'
+#' Perfect-LD copies:
+#' SNPs with identical p-values are copies of one signal (perfect LD). Each
+#' set of copies contributes one point to the density fit, and the density is
+#' then evaluated for every SNP, so copies do not narrow the effective window
+#' in the tail (which inflated functional p-values below 1e-3 before 1.1.4).
+#' Rounded p-values tie between unrelated SNPs too, almost only in the bulk
+#' of the distribution where values are dense per significant digit, and
+#' collapsing those would distort the density; so identical p-values count as
+#' copies only when they are at least half as common below p = 0.023 as above
+#' it, which holds for LD copies and fails for rounding. The window itself
+#' spans about 5,000 of the rows the density is fitted on; see
+#' \code{\link{kernelEstimator}}.
+#'
 #' Interpretation note: Functional p-values reflect the global ranking of all
 #' SNPs by the functional local FDR. A SNP with a small functional p-value but
 #' large flfdr (> 0.5) has weak individual evidence but ranks favorably
@@ -44,7 +57,9 @@
 #' when assessing individual SNP evidence. SNPs with flfdr > 0.5 should
 #' be interpreted cautiously regardless of their functional p-value.
 #'
-#' @param p.value Numeric vector of p-values to analyze.
+#' @param p.value Numeric vector of p-values to analyze, in [0, 1]. Exact
+#'   zeros are clamped to the smallest positive double with a warning;
+#'   negative values are an error.
 #' @param fpi0 Numeric vector of functional pi0 estimates, obtained
 #'   from \code{\link{fpi0est}}. Values must be in [0, 1].
 #' @param surrogate Optional numeric vector (same length as \code{p.value}) used
@@ -54,22 +69,23 @@
 #'   1.1.2); see Details.
 #' @param epsilon Numeric; lower bound for p-value clamping during density estimation.
 #'   Default is \code{.Machine$double.xmin}.
-#' @param nn Numeric; nearest-neighbor bandwidth for \code{\link{kernelEstimator}}.
-#'   If NULL (default), automatically selected as ~5000 neighbors.
+#' @param nn Numeric; nearest-neighbor bandwidth for \code{\link{kernelEstimator}},
+#'   a fraction of the rows the density is fitted on. If NULL (default), the
+#'   window spans ~5000 of those rows.
 #' @param monotone Logical; if TRUE, enforces monotonicity of the estimated density with respect to p-values within bins of the surrogate variable. Default is TRUE.
 #' @param monotone_method Character; method for enforcing monotonicity. Options are "min" (running minimum) or "pava" (Pool Adjacent Violators Algorithm). Default is "min".
 #'   We do not recommend "pava" for GWAS data sets due to LD, but it may be better for expression data.
 #' @param fp_ties Logical; whether to break ties in functional p-values using the
 #'   original p-value ordering. Default is TRUE.
-#' @param seed Integer; random seed for reproducibility of rank tie-breaking.
-#'   Default is 2026.
+#' @param seed Integer; random seed for reproducibility of rank tie-breaking,
+#'   the jitter and the null downsampling in the density fit. Default is 2026.
 #' @param verbose Logical; print progress messages. Default is TRUE.
 #' @param ... Additional arguments passed to \code{\link{kernelEstimator}}.
 #'
 #' @return
 #' An S3 object of class \code{"sffdr"} containing:
 #' \item{call}{The function call.}
-#' \item{pvalues}{Original p-values.}
+#' \item{pvalues}{The p-values as analysed (exact zeros clamped).}
 #' \item{fpvalues}{Functional p-values.}
 #' \item{fqvalues}{Functional q-values.}
 #' \item{flfdr}{Functional local false discovery rates.}
@@ -159,13 +175,17 @@ sffdr <- function(
     stop("Length of 'surrogate' must match 'p.value'.")
   }
 
-  if (any(p.value <= 0, na.rm = TRUE)) {
-    warning("Found p-values <= 0. Clamping to machine epsilon.")
-    p.value <- pmax(p.value, .Machine$double.xmin, na.rm = FALSE)
+  if (any(p.value < 0, na.rm = TRUE)) {
+    stop("Found p-values < 0: 'p.value' must hold p-values, not log p-values.")
   }
 
   if (any(p.value > 1, na.rm = TRUE)) {
     stop("Found p-values > 1.")
+  }
+
+  if (any(p.value == 0, na.rm = TRUE)) {
+    warning("Found p-values equal to 0. Clamping to the smallest positive double.")
+    p.value <- pmax(p.value, .Machine$double.xmin, na.rm = FALSE)
   }
 
   if (any(fpi0 < 0 | fpi0 > 1, na.rm = TRUE)) {
@@ -205,14 +225,28 @@ sffdr <- function(
   # Rank-transform surrogate to percentile scale
   z <- rank(surrogate_var, ties.method = "random") / n_valid
 
+  # Perfect-LD copies (SNPs with identical p-values) carry one point each in
+  # the density fit; the density is then evaluated for every SNP. Ties that
+  # come from rounded p-values are left alone (see .ld_copies).
+  copies <- .ld_copies(p_valid)
+  if (verbose && any(copies)) {
+    message(sprintf(
+      "  %d SNPs share their p-value with another SNP (%d below p = 0.023); the density is fitted on %d distinct rows...",
+      sum(copies),
+      sum(copies & p_valid < pnorm(-2)),
+      n_valid - sum(copies)
+    ))
+  }
+
   # Fit joint density
   if (verbose) {
     message("  Fitting kernel density...")
   }
 
+  xp <- cbind(z, p_valid)
   kd <- kernelEstimator(
-    x = cbind(z, p_valid),
-    eval.points = cbind(z, p_valid),
+    x = if (any(copies)) xp[!copies, , drop = FALSE] else xp,
+    eval.points = xp,
     nn = nn,
     epsilon = epsilon,
     weights = NULL,
@@ -310,6 +344,29 @@ sffdr <- function(
     ),
     class = "sffdr"
   )
+}
+
+## SNPs whose p-value is shared with an earlier SNP: perfect-LD copies, which
+## tie as often in the tail (p < 0.023, the rows the density is fitted on
+## without downsampling) as in the bulk. Rounded p-values tie between
+## unrelated SNPs, almost only in the bulk where values are dense per digit;
+## collapsing those would move mass out of the bulk and onto other SNPs'
+## surrogate values, so when ties are less than half as common in the tail as
+## in the bulk nothing is collapsed.
+.ld_copies <- function(p) {
+  dup <- duplicated(p)
+  if (!any(dup)) {
+    return(dup)
+  }
+  tied <- dup | duplicated(p, fromLast = TRUE)
+  tail <- p < pnorm(-2)
+  if (sum(tied & tail) < 20 || sum(tied) > 20 * sum(tied & !dup)) {
+    return(rep(FALSE, length(p)))                     # nothing to gain / coarse rounding
+  }
+  if (sum(!tail) >= 100 && mean(tied[tail]) < 0.5 * mean(tied[!tail])) {
+    return(rep(FALSE, length(p)))                     # ties by rounding
+  }
+  dup
 }
 
 #' @importFrom qvalue qvalue pi0est

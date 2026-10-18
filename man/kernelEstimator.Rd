@@ -9,7 +9,7 @@ kernelEstimator(
   eval.points = x,
   epsilon = .Machine$double.xmin,
   epsilon.max = 1 - 1e-04,
-  maxk = 5e+05,
+  maxk = 5000,
   maxit = 200,
   target_null = 1e+05,
   trim = 0,
@@ -36,11 +36,15 @@ below this are clamped to \code{epsilon}. Default: \code{.Machine$double.xmin}.}
 \item{epsilon.max}{Upper bound for p-values. P-values above this are clamped to
 \code{epsilon.max}. Default: \code{1 - 1e-4}.}
 
-\item{maxk}{Maximum number of fitting points passed to \code{\link[locfit]{locfit}}.
-Increase for very large datasets. Default: \code{500000}.}
+\item{maxk}{Space allocated for \code{\link[locfit]{locfit}}'s evaluation
+structure. It does not affect the fit: when it is too small, locfit stops
+with "out of vertex space" and the fit is repeated with ten times the
+space. Default: \code{5000} (about 35 MB; versions before 1.1.4 allocated
+2.7 GB).}
 
-\item{maxit}{Maximum number of iterations for local regression fitting. Default:
-\code{200}.}
+\item{maxit}{Maximum number of iterations for the bivariate local likelihood
+fit. Default: \code{200}. The univariate fit uses at most 20 (locfit's
+default), because more iterations let it diverge on tied values.}
 
 \item{target_null}{Maximum number of null SNPs to include in the weighted fit
 (bivariate case only). SNPs in the signal-enriched tail (defined by
@@ -53,21 +57,26 @@ clumped near 1. Only applies to the p-value dimension. Default is 0
 (no trimming).}
 
 \item{nn}{Nearest-neighbor bandwidth parameter for \code{\link[locfit]{locfit}},
-expressed as a fraction of the data. If \code{NULL} (default), automatically
-determined based on effective sample size to span approximately 5000 neighbors
-(which corresponds to multiple LD blocks in GWAS). Larger values increase smoothing.}
+expressed as a fraction of the rows the density is fitted on. If
+\code{NULL} (default), chosen so that the window spans approximately 5000
+of those rows (which corresponds to multiple LD blocks in GWAS); see
+Details. Larger values increase smoothing.}
 
-\item{tail_threshold}{Z-score threshold on the probit-transformed covariate scale
-(bivariate case only). SNPs with z < \code{tail_threshold} are treated as
-signal-enriched and prioritized in the adaptive fit. Default: \code{-2}
-(approximately 2.3\% of standard normal distribution).}
+\item{tail_threshold}{Threshold on the probit-transformed p-values
+(bivariate case only). SNPs with \code{qnorm(p) < tail_threshold} form the
+signal-enriched tail, which is never downsampled. Default: \code{-2}
+(p-values below about 0.023).}
 
-\item{weights}{Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores.}
+\item{weights}{Optional numeric vector of prior weights in (0, 1] for the
+fit (values above 1 are clamped to 1).}
 
 \item{verbose}{Logical; whether to print progress messages during fitting. Default is TRUE.}
 
-\item{...}{Additional arguments passed to \code{\link[locfit]{lp}} for controlling
-local polynomial fitting (e.g., \code{deg}, \code{kern}).}
+\item{...}{Additional arguments passed to \code{\link[locfit]{locfit}}
+(for example \code{scale}). The arguments \code{nn}, \code{h},
+\code{deg}, \code{kern}, \code{ev}, \code{maxk}, \code{maxit},
+\code{weights} and \code{data} are set by the estimator and cannot be
+passed here.}
 }
 \value{
 A data frame with columns:
@@ -95,7 +104,7 @@ The function implements a multi-stage density estimation procedure:
     scale via \code{qnorm} to stabilize variance and handle extreme values.
 
   \item \strong{Adaptive downsampling (bivariate only)}: To handle large GWAS
-    datasets efficiently, the null region (where the covariate suggests low signal)
+    datasets efficiently, the null region (p-values above the tail threshold)
     is downsampled to \code{target_null} SNPs, with inverse-probability weighting
     to preserve the density. Signal-enriched SNPs (tail) are always retained.
 
@@ -108,9 +117,15 @@ The function implements a multi-stage density estimation procedure:
 }
 
 The nearest-neighbor bandwidth \code{nn} controls smoothing and LD robustness.
-By targeting ~5000 neighbors (default), the estimator naturally averages over
-multiple LD blocks (~30-50 blocks in European ancestry populations), reducing
-spurious local structure while preserving true signal-covariate relationships.
+By default the window spans about 5000 of the rows the density is fitted on
+(the tail plus up to \code{target_null} null SNPs), so the estimator averages
+over multiple LD blocks (~30-50 blocks in European ancestry populations),
+reducing spurious local structure while preserving true signal-covariate
+relationships. Versions before 1.1.4 took the fraction relative to all SNPs,
+which left about 600 neighbours at one million SNPs.
+
+In the univariate case, tied values are collapsed into one point with the
+corresponding multiplicity before fitting.
 }
 \examples{
 \dontrun{
@@ -119,10 +134,10 @@ p <- runif(10000, 0, 1)
 dens <- kernelEstimator(p)
 plot(dens$x, dens$fx, type = "l")
 
-# 2D density with informative covariate
+# 2D density: the covariate (rank-transformed) first, the p-values second
 p <- runif(10000, 0, 1)
-z <- runif(10000)  # rank-norm transformed covariate
-x_mat <- cbind(p, z)
+z <- runif(10000)
+x_mat <- cbind(z, p)
 dens <- kernelEstimator(x_mat)
 }
 

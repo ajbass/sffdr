@@ -17,22 +17,25 @@ pi0_model(
 )
 }
 \arguments{
-\item{z}{Matrix/data.frame of p-values (rows=tests, cols=traits).}
+\item{z}{Numeric matrix/data.frame of p-values (rows=tests, cols=traits).}
 
-\item{indep_snps}{Logical, numeric, or character vector indicating independent SNPs (training subset).
-If NULL, uses all tests. Default: NULL.}
+\item{indep_snps}{Independent SNPs (the training subset): a logical vector
+with one entry per row of \code{z}, row indices, or SNP ids matched
+against \code{rownames(z)}. If NULL, uses all tests. Default: NULL.}
 
-\item{weights}{Optional numeric vector of weights (e.g., inverse LD scores) for weighted spline fitting. Default: NULL.}
+\item{weights}{Optional numeric vector of weights in (0, 1] (e.g., inverse LD scores) for weighted spline fitting. Default: NULL.}
 
 \item{fdr_threshold}{FDR threshold for signal definition. Default: 0.25.}
 
-\item{min_discoveries}{Min (LD-independent) significant hits required to include trait. Default: 150.}
+\item{min_discoveries}{Min (LD-independent) significant hits required to place
+a trait's knots from its discoveries; with fewer, the trait keeps a single
+fallback knot. Default: 150.}
 
 \item{min_snps_per_knot}{Base minimum significant SNPs per knot interval. Default: 100.
 Dynamically scales up for larger datasets to prevent overfitting.}
 
 \item{n_knots}{Target knot count. Default: 5. Automatically reduced if insufficient
-discoveries (via \code{min_snps_per_knot}) or capped by \code{max_knots}.}
+discoveries (via \code{min_snps_per_knot}).}
 
 \item{verbose}{Print selection details. Default: TRUE.}
 
@@ -50,4 +53,9 @@ adaptively selecting knots based on an FDR threshold.
 \details{
 Independent SNPs determine knot placement; all SNPs train the model to capture signal shape.
 For smaller datasets (<100K), consider reducing \code{min_snps_per_knot} and \code{min_discoveries} to improve knot placement.
+Every column must hold p-values: the knots of a column are placed at the
+quantiles of its discoveries (\code{\link[qvalue]{qvalue}} at
+\code{fdr_threshold}), and a column with values outside [0, 1] gets the
+fallback knot with a warning. A null anchor knot at rank 0.1 is always
+added.
 }

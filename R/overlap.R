@@ -20,6 +20,7 @@
 #' @seealso \code{\link{decorrelate_informative}}
 #' @export
 estimate_overlap <- function(z, z_informative, indep_snps = NULL, threshold = 1.5) {
+  if (length(z) != NROW(z_informative)) stop("'z' and 'z_informative' must have one entry per SNP.")
   Z <- cbind(z, as.matrix(z_informative))
   if (!is.numeric(Z)) stop("'z' and 'z_informative' must be numeric.")
   trn <- .train_set(indep_snps, nrow(Z))
@@ -43,15 +44,20 @@ estimate_overlap <- function(z, z_informative, indep_snps = NULL, threshold = 1.
 
 ## ---- internal helpers ----------------------------------------------------
 
-## training set as a logical vector
-.train_set <- function(indep_snps, n) {
+## training set as a logical vector: logical (one entry per SNP), row indices,
+## or SNP ids matched against `ids` (the row names)
+.train_set <- function(indep_snps, n, ids = NULL) {
   if (is.null(indep_snps)) return(rep(TRUE, n))
   if (is.logical(indep_snps)) {
     if (length(indep_snps) != n) stop("logical 'indep_snps' must have one entry per SNP.")
     return(!is.na(indep_snps) & indep_snps)
   }
+  if (is.character(indep_snps)) {
+    if (is.null(ids)) stop("character 'indep_snps' needs row names (SNP ids) on the data.")
+    return(ids %in% indep_snps)
+  }
   if (!is.numeric(indep_snps) || any(is.na(indep_snps)) || any(indep_snps < 1 | indep_snps > n)) {
-    stop("'indep_snps' must be a logical vector or row indices between 1 and the number of SNPs.")
+    stop("'indep_snps' must be a logical vector, row indices between 1 and the number of SNPs, or SNP ids.")
   }
   seq_len(n) %in% indep_snps
 }

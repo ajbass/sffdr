@@ -7,15 +7,17 @@
 fit_univariate_density(train_s, nn, maxit, maxk, weights = NULL, ...)
 }
 \arguments{
-\item{train_s}{Numeric vector on probit scale.}
+\item{train_s}{Numeric vector on probit scale (distinct values).}
 
 \item{nn}{Nearest-neighbor bandwidth (NULL for automatic).}
 
-\item{maxit}{Maximum iterations for locfit.}
+\item{maxit}{Maximum iterations for locfit (at most 20 are used).}
 
-\item{maxk}{Maximum fitting points for locfit.}
+\item{maxk}{Space for locfit's evaluation structure.}
 
-\item{...}{Additional arguments for lp().}
+\item{weights}{Optional numeric vector of weights (multiplicities).}
+
+\item{...}{Additional arguments for locfit().}
 }
 \value{
 Fitted locfit object.

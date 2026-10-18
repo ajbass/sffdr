@@ -128,3 +128,8 @@ test_that("sffdr on decorrelated covariates: no false discoveries when the prima
   res <- sffdr(p1, fpi0 = f$fpi0, verbose = FALSE)
   expect_equal(sum(res$fqvalues <= 0.05), 0)
 })
+
+test_that("estimate_overlap checks that the studies have one entry per SNP", {
+  set.seed(1)
+  expect_error(estimate_overlap(rnorm(1000), rnorm(999)), "one entry per SNP")
+})

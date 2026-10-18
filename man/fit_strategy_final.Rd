@@ -25,16 +25,19 @@ fit_strategy_final(
 
 \item{nn_safe}{Second (safer, more conservative) nn value.}
 
+\item{h_safe}{Constant bandwidth component.}
+
 \item{maxit}{Maximum iterations for locfit.}
 
-\item{maxk}{Maximum number of fitting points for locfit.}
+\item{maxk}{Space for locfit's evaluation structure.}
 
 \item{verbose}{Logical; print progress messages.}
 
-\item{...}{Additional arguments passed to lp() in locfit.}
+\item{...}{Additional arguments passed to locfit().}
 }
 \value{
-A fitted locfit object, or NULL if all strategies fail.
+A fitted locfit object; an error with the last message if every
+  strategy fails.
 }
 \description{
 Internal helper function that attempts to fit a locfit model using multiple

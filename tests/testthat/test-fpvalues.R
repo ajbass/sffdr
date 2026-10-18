@@ -134,3 +134,31 @@ test_that("Signal Case: Correctly identifies and ranks mixed signal/noise", {
   # The last item (Pure Noise) should be close to or exactly 1.0
   expect_equal(tail(res$fp, 1), 1.0)
 })
+
+test_that("Tests with identical lfdr and p form one set, whatever the input order", {
+  lfdr <- c(0.3, 0.1, 0.1, 0.1, 0.7, 0.2)
+  p <- c(0.5, 0.01, 0.01, 0.01, 0.9, 0.05)
+  res <- fpvalues(lfdr, p)
+  # the three copies get the same values: those of the whole set
+  expect_equal(res$fp[2], res$fp[3])
+  expect_equal(res$fp[3], res$fp[4])
+  expect_equal(res$fq[2], res$fq[4])
+  # reversing the input order gives the same values per test
+  o <- rev(seq_along(lfdr))
+  res_rev <- fpvalues(lfdr[o], p[o])
+  expect_equal(res_rev$fp[o], res$fp)
+  expect_equal(res_rev$fq[o], res$fq)
+  # a set's value is the value at its last member: the null mass up to and
+  # including the whole set
+  expect_equal(res$fq[2], mean(c(0.1, 0.1, 0.1)))
+  expect_equal(res$fp[2], 0.3 / sum(lfdr))
+  # without full ties nothing changes relative to the running values
+  expect_equal(res$fp[6], 0.5 / sum(lfdr))
+})
+
+test_that("fpvalues validates lfdr and handles an all-zero lfdr", {
+  expect_error(fpvalues(c(0.1, -0.2)), "\\[0, 1\\]")
+  res <- fpvalues(c(0, 0, 0), c(0.1, 0.2, 0.3))
+  expect_equal(res$fp, c(0, 0, 0))
+  expect_equal(res$fq, c(0, 0, 0))
+})

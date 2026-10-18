@@ -37,11 +37,14 @@
 #'   Required if \code{pi0_model_obj} is not provided. Default is NULL.
 #' @param pi0_model Optional formula (as character string or formula object).
 #'   Required if \code{pi0_model_obj} is not provided. Default is NULL.
-#' @param indep_snps Optional logical vector indicating independent SNPs for
-#'   model fitting. Default is NULL (all SNPs used).
-#' @param weights Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores. If these are available
+#' @param indep_snps Optional independent SNPs for model fitting: a logical
+#'   vector with one entry per p-value, row indices, or SNP ids matched against
+#'   \code{rownames(z)}. Default is NULL (all SNPs used).
+#' @param weights Optional numeric vector of weights in (0, 1], one per p-value,
+#'   for the model fit. For GWAS data, this should be inverse LD scores (values
+#'   above 1 are clamped to 1 with a warning). If these are available
 #'   then you don't have to use the indep_snps argument, as the weights will effectively prioritize independent SNPs in the fitting process.
-#' @param lambda Numeric vector of lambda thresholds. Default is \code{seq(0.05, 0.95, 0.05)}.
+#' @param lambda Numeric vector of lambda thresholds in (0, 1). Default is \code{seq(0.05, 0.95, 0.05)}.
 #' @param constrained.p Logical; use constrained binomial family. Default is TRUE.
 #' @param tol Numeric; convergence tolerance. Default is 1e-9.
 #' @param maxit Integer; maximum iterations. Default is 200.
@@ -71,10 +74,14 @@
 #'
 #' @return An object of class \code{fpi0} (a list) containing:
 #' \describe{
-#'   \item{fpi0}{Numeric vector of functional pi0 estimates for each test.}
-#'   \item{tableLambda}{A data frame summarizing results for each lambda value.}
-#'   \item{MISE}{The Mean Integrated Squared Error (MISE) for the chosen model.}
+#'   \item{fpi0}{Numeric vector of functional pi0 estimates for each test,
+#'     floored at 0.01. Tests with a missing p-value or covariate get 1.}
+#'   \item{tableLambda}{A data frame with one row per lambda value: the
+#'     MISE, the mean fitted pi0 and whether it was chosen.}
+#'   \item{MISE}{The Mean Integrated Squared Error (MISE) at each lambda.}
 #'   \item{lambda}{The selected optimal lambda value.}
+#'   \item{model}{The fitted model at the selected lambda (class
+#'     \code{fastglm2}; \code{predict()} gives \eqn{P(p \ge \lambda | z)}).}
 #' }
 #'
 #' @importFrom stats mad pnorm cor family predict model.matrix qnorm dnorm runif
@@ -150,9 +157,33 @@ fpi0est <- function(
     )
   }
 
+  if (!is.numeric(p)) {
+    stop("'p' must be a numeric vector of p-values.")
+  }
+  if (length(p) != nrow(z)) {
+    stop("'p' must have one entry per row of 'z'.")
+  }
   if (min(p, na.rm = TRUE) < 0 || max(p, na.rm = TRUE) > 1) {
     stop("P-values must be in [0, 1].")
   }
+  if (!is.null(weights)) {
+    if (!is.numeric(weights) || length(weights) != length(p)) {
+      stop("'weights' must be a numeric vector with one entry per p-value.")
+    }
+    if (any(weights > 1, na.rm = TRUE)) {
+      warning(
+        "'weights' above 1 are clamped to 1: weights are expected in (0, 1], e.g. inverse LD scores, not LD scores."
+      )
+    }
+  }
+  if (
+    !is.numeric(lambda) || length(lambda) == 0 || anyNA(lambda) ||
+      any(lambda <= 0 | lambda >= 1)
+  ) {
+    stop("'lambda' must be numeric values in (0, 1).")
+  }
+  lambda <- sort(unique(lambda))
+  train <- .train_set(indep_snps, length(p), rownames(z))
 
   if (verbose) {
     message("==================================================")
@@ -179,11 +210,7 @@ fpi0est <- function(
     ))
   }
 
-  fit_idx <- rep(TRUE, n_valid)
-
-  if (!is.null(indep_snps)) {
-    fit_idx <- fit_idx & indep_snps[valid_idx]
-  }
+  fit_idx <- train[valid_idx]
 
   if (!is.null(weights)) {
     fit_idx <- fit_idx & !is.na(weights[valid_idx]) & weights[valid_idx] > 0
@@ -284,10 +311,15 @@ fpi0est <- function(
     fpi0_models$fpi0 <- .lapply_pb(lambda, fit_pi0_at_lambda, verbose = verbose)
   }
 
-  # Extract fitted pi0 values for all lambda
-  fpi0_matrix <- sapply(seq_along(lambda), function(i) {
-    pmin(fitted.values(fpi0_models$fpi0[[i]]) / (1 - lambda[i]), 1)
-  })
+  # Extract fitted pi0 values for all lambda (one column per lambda)
+  fpi0_matrix <- vapply(
+    seq_along(lambda),
+    function(i) {
+      pmin(fitted.values(fpi0_models$fpi0[[i]]) / (1 - lambda[i]), 1)
+    },
+    numeric(length(p_fit))
+  )
+  fpi0_matrix <- matrix(fpi0_matrix, ncol = length(lambda))
 
   ref_pi0 <- pmin(fitted.values(fpi0_models$fpi0[[1]]) / (1 - lambda[1]), 1)
 
@@ -340,7 +372,14 @@ fpi0est <- function(
   }
 
   fpi0_models$chosen <- fpi0_models$lambda == lambda_hat
-  fpi0_selected <- fpi0_models[fpi0_models$chosen, ]
+  fit_hat <- fpi0_models$fpi0[[min_idx]]
+  if (isFALSE(fit_hat$converged)) {
+    warning(sprintf(
+      "The pi0 model at lambda = %.2f did not converge in %d iterations; consider increasing 'maxit' or simplifying the model.",
+      lambda_hat,
+      maxit
+    ))
+  }
 
   # Predict for all valid observations (chunk-wise for large data memory safety)
   if (verbose) {
@@ -363,7 +402,7 @@ fpi0est <- function(
 
       fpi0_pred[idx_start:idx_end] <- pmin(
         predict(
-          fpi0_selected$fpi0[[1]],
+          fit_hat,
           newdata = z_chunk,
           type = "response"
         ) /
@@ -374,7 +413,7 @@ fpi0est <- function(
   } else {
     fpi0_pred <- pmin(
       predict(
-        fpi0_selected$fpi0[[1]],
+        fit_hat,
         newdata = as.data.frame(z_valid),
         type = "response"
       ) /
@@ -386,7 +425,7 @@ fpi0est <- function(
   # Apply floor to fpi0 predictions
   fpi0_pred <- pmax(fpi0_pred, 0.01)
 
-  # Fill results including NAs
+  # Fill results: tests with a missing p-value or covariate get fpi0 = 1
   fpi0_out <- rep(1, length(p))
   fpi0_out[valid_idx] <- fpi0_pred
 
@@ -395,13 +434,20 @@ fpi0est <- function(
     message("==================================================")
     message("")
   }
-  # Return S3 object
+  # Return S3 object; only the chosen model is kept (each fit holds several
+  # vectors of length n)
   structure(
     list(
       fpi0 = fpi0_out,
-      tableLambda = fpi0_models,
+      tableLambda = data.frame(
+        lambda = lambda,
+        MISE = mise_stats,
+        mean_fpi0 = colMeans(fpi0_matrix),
+        chosen = fpi0_models$chosen
+      ),
       MISE = mise_stats,
-      lambda = lambda_hat
+      lambda = lambda_hat,
+      model = fit_hat
     ),
     class = "fpi0"
   )

@@ -21,11 +21,15 @@
 #' @param epsilon.max Upper bound for p-values. P-values above this are clamped to
 #'   \code{epsilon.max}. Default: \code{1 - 1e-4}.
 #'
-#' @param maxk Maximum number of fitting points passed to \code{\link[locfit]{locfit}}.
-#'   Increase for very large datasets. Default: \code{500000}.
+#' @param maxk Space allocated for \code{\link[locfit]{locfit}}'s evaluation
+#'   structure. It does not affect the fit: when it is too small, locfit stops
+#'   with "out of vertex space" and the fit is repeated with ten times the
+#'   space. Default: \code{5000} (about 35 MB; versions before 1.1.4 allocated
+#'   2.7 GB).
 #'
-#' @param maxit Maximum number of iterations for local regression fitting. Default:
-#'   \code{200}.
+#' @param maxit Maximum number of iterations for the bivariate local likelihood
+#'   fit. Default: \code{200}. The univariate fit uses at most 20 (locfit's
+#'   default), because more iterations let it diverge on tied values.
 #'
 #' @param target_null Maximum number of null SNPs to include in the weighted fit
 #'   (bivariate case only). SNPs in the signal-enriched tail (defined by
@@ -38,19 +42,24 @@
 #'   (no trimming).
 #'
 #' @param nn Nearest-neighbor bandwidth parameter for \code{\link[locfit]{locfit}},
-#'   expressed as a fraction of the data. If \code{NULL} (default), automatically
-#'   determined based on effective sample size to span approximately 5000 neighbors
-#'   (which corresponds to multiple LD blocks in GWAS). Larger values increase smoothing.
+#'   expressed as a fraction of the rows the density is fitted on. If
+#'   \code{NULL} (default), chosen so that the window spans approximately 5000
+#'   of those rows (which corresponds to multiple LD blocks in GWAS); see
+#'   Details. Larger values increase smoothing.
 #'
-#' @param tail_threshold Z-score threshold on the probit-transformed covariate scale
-#'   (bivariate case only). SNPs with z < \code{tail_threshold} are treated as
-#'   signal-enriched and prioritized in the adaptive fit. Default: \code{-2}
-#'   (approximately 2.3\% of standard normal distribution).
+#' @param tail_threshold Threshold on the probit-transformed p-values
+#'   (bivariate case only). SNPs with \code{qnorm(p) < tail_threshold} form the
+#'   signal-enriched tail, which is never downsampled. Default: \code{-2}
+#'   (p-values below about 0.023).
 #'
-#' @param weights Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores.
+#' @param weights Optional numeric vector of prior weights in (0, 1] for the
+#'   fit (values above 1 are clamped to 1).
 #' @param verbose Logical; whether to print progress messages during fitting. Default is TRUE.
-#' @param ... Additional arguments passed to \code{\link[locfit]{lp}} for controlling
-#'   local polynomial fitting (e.g., \code{deg}, \code{kern}).
+#' @param ... Additional arguments passed to \code{\link[locfit]{locfit}}
+#'   (for example \code{scale}). The arguments \code{nn}, \code{h},
+#'   \code{deg}, \code{kern}, \code{ev}, \code{maxk}, \code{maxit},
+#'   \code{weights} and \code{data} are set by the estimator and cannot be
+#'   passed here.
 #'
 #' @return A data frame with columns:
 #'   \describe{
@@ -70,7 +79,7 @@
 #'     scale via \code{qnorm} to stabilize variance and handle extreme values.
 #'
 #'   \item \strong{Adaptive downsampling (bivariate only)}: To handle large GWAS
-#'     datasets efficiently, the null region (where the covariate suggests low signal)
+#'     datasets efficiently, the null region (p-values above the tail threshold)
 #'     is downsampled to \code{target_null} SNPs, with inverse-probability weighting
 #'     to preserve the density. Signal-enriched SNPs (tail) are always retained.
 #'
@@ -83,9 +92,15 @@
 #' }
 #'
 #' The nearest-neighbor bandwidth \code{nn} controls smoothing and LD robustness.
-#' By targeting ~5000 neighbors (default), the estimator naturally averages over
-#' multiple LD blocks (~30-50 blocks in European ancestry populations), reducing
-#' spurious local structure while preserving true signal-covariate relationships.
+#' By default the window spans about 5000 of the rows the density is fitted on
+#' (the tail plus up to \code{target_null} null SNPs), so the estimator averages
+#' over multiple LD blocks (~30-50 blocks in European ancestry populations),
+#' reducing spurious local structure while preserving true signal-covariate
+#' relationships. Versions before 1.1.4 took the fraction relative to all SNPs,
+#' which left about 600 neighbours at one million SNPs.
+#'
+#' In the univariate case, tied values are collapsed into one point with the
+#' corresponding multiplicity before fitting.
 #'
 #' @seealso \code{\link[locfit]{locfit}}, \code{\link{sffdr}}
 #'
@@ -96,10 +111,10 @@
 #' dens <- kernelEstimator(p)
 #' plot(dens$x, dens$fx, type = "l")
 #'
-#' # 2D density with informative covariate
+#' # 2D density: the covariate (rank-transformed) first, the p-values second
 #' p <- runif(10000, 0, 1)
-#' z <- runif(10000)  # rank-norm transformed covariate
-#' x_mat <- cbind(p, z)
+#' z <- runif(10000)
+#' x_mat <- cbind(z, p)
 #' dens <- kernelEstimator(x_mat)
 #' }
 #'
@@ -109,7 +124,7 @@ kernelEstimator <- function(
   eval.points = x,
   epsilon = .Machine$double.xmin,
   epsilon.max = 1 - 1e-4,
-  maxk = 500000,
+  maxk = 5000,
   maxit = 200,
   target_null = 100000,
   trim = 0,
@@ -123,6 +138,24 @@ kernelEstimator <- function(
   is_matrix <- is.matrix(x)
   if (is_matrix && ncol(x) < 2) {
     stop("Matrix input must have at least 2 columns.")
+  }
+  if (!is.numeric(x) || anyNA(x)) {
+    stop("'x' must be numeric without missing values.")
+  }
+  if (!is.null(weights) && length(weights) != NROW(x)) {
+    stop("'weights' must have one entry per row of 'x'.")
+  }
+
+  # Arguments the fitting cascade sets itself
+  reserved <- intersect(
+    names(list(...)),
+    c("nn", "h", "deg", "kern", "ev", "maxk", "maxit", "weights", "data")
+  )
+  if (length(reserved) > 0) {
+    stop(sprintf(
+      "'%s' is set by kernelEstimator() and cannot be passed through '...'.",
+      reserved[1]
+    ))
   }
 
   # Transform to probit scale with clamping
@@ -141,16 +174,11 @@ kernelEstimator <- function(
     weights <- pmin(pmax(weights, 1e-6), 1.0)
   }
 
-  # Add jitter to Z-scores to prevent matrix singularities
+  # Fit density model
   jitter_mag <- 1e-6
   if (is_matrix) {
+    # Add jitter to Z-scores to prevent matrix singularities
     train_s[, 2] <- train_s[, 2] + runif(nrow(train_s), -jitter_mag, jitter_mag)
-  } else {
-    train_s <- train_s + runif(length(train_s), -jitter_mag, jitter_mag)
-  }
-
-  # Fit density model
-  if (is_matrix) {
     lfit <- fit_bivariate_density(
       train_s = train_s,
       tail_threshold = tail_threshold,
@@ -163,6 +191,18 @@ kernelEstimator <- function(
       ...
     )
   } else {
+    # Tied values become one point with their multiplicity, then the jitter
+    keep <- !duplicated(train_s)
+    if (!all(keep)) {
+      grp <- match(train_s, train_s[keep])
+      weights <- if (is.null(weights)) {
+        as.numeric(tabulate(grp, sum(keep)))
+      } else {
+        as.numeric(rowsum(weights, grp))
+      }
+      train_s <- train_s[keep]
+    }
+    train_s <- train_s + runif(length(train_s), -jitter_mag, jitter_mag)
     lfit <- fit_univariate_density(
       train_s = train_s,
       nn = nn,
@@ -229,17 +269,17 @@ kernelEstimator <- function(
 #'
 #' Internal helper for 2D kernel density estimation with signal prioritization.
 #'
-#' @param train_s 2-column matrix on probit scale (p-values, covariate).
-#' @param tail_threshold Z-score threshold for signal detection.
+#' @param train_s 2-column matrix on probit scale (covariate, p-values).
+#' @param tail_threshold Threshold on the probit p-values for the signal tail.
 #' @param target_null Maximum null SNPs to retain after downsampling.
 #' @param nn Nearest-neighbor bandwidth (NULL for automatic).
 #' @param maxit Maximum iterations for locfit.
-#' @param maxk Maximum fitting points for locfit.
+#' @param maxk Space for locfit's evaluation structure.
 #' @param weights Optional numeric vector of weights for density estimation.
 #' @param verbose Logical; whether to print progress messages during fitting.
-#' @param ... Additional arguments for lp().
+#' @param ... Additional arguments for locfit().
 #'
-#' @return Fitted locfit object or NULL.
+#' @return Fitted locfit object.
 #' @keywords internal
 fit_bivariate_density <- function(
   train_s,
@@ -256,7 +296,7 @@ fit_bivariate_density <- function(
     weights <- rep(1.0, nrow(train_s))
   }
 
-  # 2. Identify Signal vs Null — filter on matrix before data.frame construction
+  # 2. Identify Signal vs Null -- filter on matrix before data.frame construction
   z_col <- train_s[, 2]
   is_tail <- z_col < tail_threshold
   idx_tail <- which(is_tail)
@@ -285,17 +325,19 @@ fit_bivariate_density <- function(
   mat_final <- train_s[idx_final, , drop = FALSE]
   fit_data <- data.frame(V1 = mat_final[, 1], V2 = mat_final[, 2], w = w_vec)
 
-  # valid_data: tail rows only — filter on numeric vector, not data.frame column
+  # valid_data: tail rows only -- filter on numeric vector, not data.frame column
   is_tail_final <- mat_final[, 2] < tail_threshold
   valid_data <- fit_data[is_tail_final, , drop = FALSE]
 
-  # 5. Adaptive Bandwidth Selection
+  # 5. Adaptive Bandwidth Selection: ~5000 neighbours among the fitted rows
+  #    (locfit's nn is a fraction of the rows it fits, not of the weights)
   n_eff <- sum(fit_data$w)
+  n_fit <- nrow(fit_data)
   if (!is.null(nn)) {
     nn_high <- nn_safe <- nn
   } else {
-    nn_high <- max(0.005, min(0.05, 5000 / n_eff))
-    nn_safe <- max(0.010, min(0.05, 5000 / n_eff))
+    nn_high <- max(0.005, min(0.05, 5000 / n_fit))
+    nn_safe <- max(0.010, min(0.05, 5000 / n_fit))
   }
 
   h_safe <- max(0.05, 0.5 * (n_eff^(-1 / 6)))
@@ -319,11 +361,12 @@ fit_bivariate_density <- function(
 #'
 #' Internal helper for 1D kernel density estimation.
 #'
-#' @param train_s Numeric vector on probit scale.
+#' @param train_s Numeric vector on probit scale (distinct values).
 #' @param nn Nearest-neighbor bandwidth (NULL for automatic).
-#' @param maxit Maximum iterations for locfit.
-#' @param maxk Maximum fitting points for locfit.
-#' @param ... Additional arguments for lp().
+#' @param maxit Maximum iterations for locfit (at most 20 are used).
+#' @param maxk Space for locfit's evaluation structure.
+#' @param weights Optional numeric vector of weights (multiplicities).
+#' @param ... Additional arguments for locfit().
 #'
 #' @return Fitted locfit object.
 #' @keywords internal
@@ -342,22 +385,41 @@ fit_univariate_density <- function(
   fit_data <- data.frame(train_s = train_s, w = weights)
 
   n_eff <- sum(fit_data$w)
+  n_fit <- nrow(fit_data)
 
+  # At least 10 distinct points in the window: a local quadratic with fewer
+  # diverges (and crashed locfit before 1.1.4 on tied values)
   nn_base <- if (!is.null(nn)) {
     nn
   } else {
-    max(0.01, min(.05, 5000 / n_eff))
+    max(0.01, min(.05, 5000 / n_eff), min(1, 10 / n_fit))
   }
+  maxit <- min(maxit, 20)
 
   h_safe <- max(0.05, 0.5 * (n_eff^(-1 / 6)))
 
-  locfit(
-    ~ lp(train_s, nn = nn_base, h = h_safe, ...),
-    data = fit_data,
-    weights = fit_data$w,
-    maxk = maxk,
-    maxit = maxit
-  )
+  fit_fun <- function(nn_use, h_use, maxk_use) {
+    locfit(
+      ~ lp(train_s, nn = nn_use, h = h_use),
+      data = fit_data,
+      weights = fit_data$w,
+      maxk = maxk_use,
+      maxit = maxit,
+      ...
+    )
+  }
+  res <- .fit_with_maxk(function(mk) fit_fun(nn_base, h_safe, mk), maxk)
+  if (is.null(res$fit)) {
+    # one safer attempt: twice the bandwidth
+    res <- .fit_with_maxk(
+      function(mk) fit_fun(min(1, 2 * nn_base), 2 * h_safe, mk),
+      maxk
+    )
+  }
+  if (is.null(res$fit)) {
+    stop("Kernel estimation failed: ", res$error)
+  }
+  res$fit
 }
 
 #' Fit locfit with Multiple Fallback Strategies
@@ -369,12 +431,14 @@ fit_univariate_density <- function(
 #' @param valid_data Subset of data used for validation (typically signal-rich region).
 #' @param nn_high First (higher resolution) nn value to try.
 #' @param nn_safe Second (safer, more conservative) nn value.
+#' @param h_safe Constant bandwidth component.
 #' @param maxit Maximum iterations for locfit.
-#' @param maxk Maximum number of fitting points for locfit.
+#' @param maxk Space for locfit's evaluation structure.
 #' @param verbose Logical; print progress messages.
-#' @param ... Additional arguments passed to lp() in locfit.
+#' @param ... Additional arguments passed to locfit().
 #'
-#' @return A fitted locfit object, or NULL if all strategies fail.
+#' @return A fitted locfit object; an error with the last message if every
+#'   strategy fails.
 #' @keywords internal
 fit_strategy_final <- function(
   data,
@@ -446,6 +510,7 @@ fit_strategy_final <- function(
     )
   )
 
+  last_error <- "no strategy produced a valid fit"
   for (s in strats) {
     if (verbose) {
       message(
@@ -461,38 +526,41 @@ fit_strategy_final <- function(
     }
 
     fatal <- FALSE
-    fit <- tryCatch(
-      {
-        withCallingHandlers(
-          {
-            locfit(
-              ~ lp(V1, V2, nn = s$nn, h = s$h, deg = s$deg), # <-- h goes inside lp()
-              data = data,
-              weights = data$w,
-              kern = s$kern,
-              ev = s$ev,
-              maxit = maxit,
-              maxk = maxk,
-              ...
+    fit_fun <- function(maxk_use) {
+      withCallingHandlers(
+        {
+          locfit(
+            ~ lp(V1, V2, nn = s$nn, h = s$h, deg = s$deg), # <-- h goes inside lp()
+            data = data,
+            weights = data$w,
+            kern = s$kern,
+            ev = s$ev,
+            maxit = maxit,
+            maxk = maxk_use,
+            ...
+          )
+        },
+        warning = function(w) {
+          msg <- conditionMessage(w)
+          if (
+            grepl(
+              "procv|vertex|newsplit|maxk|max_nr|convergence|singular|zero variance",
+              msg,
+              ignore.case = TRUE
             )
-          },
-          warning = function(w) {
-            msg <- conditionMessage(w)
-            if (
-              grepl(
-                "procv|vertex|newsplit|maxk|max_nr|convergence|singular|zero variance",
-                msg,
-                ignore.case = TRUE
-              )
-            ) {
-              fatal <<- TRUE
-            }
-            invokeRestart("muffleWarning")
+          ) {
+            fatal <<- TRUE
+            last_error <<- msg
           }
-        )
-      },
-      error = function(e) NULL
-    )
+          invokeRestart("muffleWarning")
+        }
+      )
+    }
+    res <- .fit_with_maxk(fit_fun, maxk)
+    fit <- res$fit
+    if (!is.null(res$error)) {
+      last_error <- res$error
+    }
 
     if (!fatal && validate(fit)) {
       if (verbose) {
@@ -506,5 +574,32 @@ fit_strategy_final <- function(
     }
   }
 
-  NULL
+  stop(
+    "Kernel estimation failed (all strategies exhausted); last error: ",
+    last_error
+  )
+}
+
+## locfit allocates maxk units of evaluation space and stops with "out of
+## vertex space" when it is too small; repeat with ten times the space
+.fit_with_maxk <- function(fit_fun, maxk, max_maxk = 5e6) {
+  repeat {
+    err <- NULL
+    fit <- tryCatch(
+      fit_fun(maxk),
+      error = function(e) {
+        err <<- conditionMessage(e)
+        NULL
+      }
+    )
+    if (
+      !is.null(fit) ||
+        is.null(err) ||
+        !grepl("vertex space", err, fixed = TRUE) ||
+        maxk >= max_maxk
+    ) {
+      return(list(fit = fit, error = err, maxk = maxk))
+    }
+    maxk <- maxk * 10
+  }
 }

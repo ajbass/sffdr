@@ -20,7 +20,9 @@ sffdr(
 )
 }
 \arguments{
-\item{p.value}{Numeric vector of p-values to analyze.}
+\item{p.value}{Numeric vector of p-values to analyze, in [0, 1]. Exact
+zeros are clamped to the smallest positive double with a warning;
+negative values are an error.}
 
 \item{fpi0}{Numeric vector of functional pi0 estimates, obtained
 from \code{\link{fpi0est}}. Values must be in [0, 1].}
@@ -35,8 +37,9 @@ as a surrogate variable for compression. If NULL (default), uses
 \item{epsilon}{Numeric; lower bound for p-value clamping during density estimation.
 Default is \code{.Machine$double.xmin}.}
 
-\item{nn}{Numeric; nearest-neighbor bandwidth for \code{\link{kernelEstimator}}.
-If NULL (default), automatically selected as ~5000 neighbors.}
+\item{nn}{Numeric; nearest-neighbor bandwidth for \code{\link{kernelEstimator}},
+a fraction of the rows the density is fitted on. If NULL (default), the
+window spans ~5000 of those rows.}
 
 \item{monotone}{Logical; if TRUE, enforces monotonicity of the estimated density with respect to p-values within bins of the surrogate variable. Default is TRUE.}
 
@@ -46,8 +49,8 @@ We do not recommend "pava" for GWAS data sets due to LD, but it may be better fo
 \item{fp_ties}{Logical; whether to break ties in functional p-values using the
 original p-value ordering. Default is TRUE.}
 
-\item{seed}{Integer; random seed for reproducibility of rank tie-breaking.
-Default is 2026.}
+\item{seed}{Integer; random seed for reproducibility of rank tie-breaking,
+the jitter and the null downsampling in the density fit. Default is 2026.}
 
 \item{verbose}{Logical; print progress messages. Default is TRUE.}
 
@@ -56,7 +59,7 @@ Default is 2026.}
 \value{
 An S3 object of class \code{"sffdr"} containing:
 \item{call}{The function call.}
-\item{pvalues}{Original p-values.}
+\item{pvalues}{The p-values as analysed (exact zeros clamped).}
 \item{fpvalues}{Functional p-values.}
 \item{fqvalues}{Functional q-values.}
 \item{flfdr}{Functional local false discovery rates.}
@@ -98,6 +101,19 @@ association, so their place is the functional pi0 model, as a covariate
 (see the vignette); as inverse weights they remain available in
 \code{\link{pi0_model}} and \code{\link{fpi0est}} in place of an LD-pruned
 training set.
+
+Perfect-LD copies:
+SNPs with identical p-values are copies of one signal (perfect LD). Each
+set of copies contributes one point to the density fit, and the density is
+then evaluated for every SNP, so copies do not narrow the effective window
+in the tail (which inflated functional p-values below 1e-3 before 1.1.4).
+Rounded p-values tie between unrelated SNPs too, almost only in the bulk
+of the distribution where values are dense per significant digit, and
+collapsing those would distort the density; so identical p-values count as
+copies only when they are at least half as common below p = 0.023 as above
+it, which holds for LD copies and fails for rounding. The window itself
+spans about 5,000 of the rows the density is fitted on; see
+\code{\link{kernelEstimator}}.
 
 Interpretation note: Functional p-values reflect the global ranking of all
 SNPs by the functional local FDR. A SNP with a small functional p-value but

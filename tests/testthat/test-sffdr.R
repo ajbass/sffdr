@@ -50,7 +50,7 @@ test_that("sffdr handles zero p-values", {
   p <- c(0, 0, runif(98, 0, 1))
   fpi0 <- runif(n, 0.8, 0.95)
 
-  expect_warning(result <- sffdr(p, fpi0), "p-values <= 0")
+  expect_warning(result <- sffdr(p, fpi0), "equal to 0")
   expect_s3_class(result, "sffdr")
   expect_true(all(result$fpvalues >= 0 & result$fpvalues <= 1))
 })
@@ -176,6 +176,7 @@ test_that("sffdr Conditional Smoothing flattens local LD mountains without cross
 })
 
 test_that("sffdr Conditional Smoothing scales efficiently to large datasets (N > 50000)", {
+  skip_on_cran()
   dat <- simulate_mesa_data(n = 55000)
 
   res_mono <- sffdr(
@@ -204,6 +205,7 @@ test_that("sffdr Conditional Smoothing scales efficiently to large datasets (N >
 })
 
 test_that("sffdr gracefully handles data with ZERO true signals (Pure Null)", {
+  skip_on_cran()
   set.seed(2026)
   n <- 55000
 
@@ -246,4 +248,84 @@ test_that("sffdr ignores weights with a warning and matches the unweighted fit",
   expect_equal(res$fpvalues, ref$fpvalues)
   expect_equal(res$fqvalues, ref$fqvalues)
   expect_equal(res$flfdr, ref$flfdr)
+})
+
+test_that("sffdr stops on negative p-values", {
+  p <- c(-0.5, runif(99))
+  fpi0 <- runif(100, 0.8, 0.95)
+  expect_error(sffdr(p, fpi0, verbose = FALSE), "< 0")
+})
+
+test_that("sffdr maps missing values back to their positions", {
+  set.seed(11)
+  n <- 2000
+  p <- c(runif(n - 100), 10^-runif(100, 2, 8))
+  fpi0 <- runif(n, 0.8, 0.95)
+  p[c(5, 500)] <- NA
+  fpi0[c(7, 900)] <- NA
+  res <- sffdr(p, fpi0, verbose = FALSE)
+  na_pos <- c(5, 7, 500, 900)
+  expect_true(all(is.na(res$fpvalues[na_pos])))
+  expect_true(all(is.na(res$fqvalues[na_pos])))
+  expect_true(all(is.na(res$flfdr[na_pos])))
+  expect_true(all(is.na(res$fx[na_pos])))
+  expect_false(anyNA(res$fpvalues[-na_pos]))
+  expect_equal(res$fpi0, fpi0)
+})
+
+test_that("plot.sffdr runs with missing values", {
+  set.seed(12)
+  n <- 3000
+  p <- c(runif(n - 100), 10^-runif(100, 2, 9))
+  fpi0 <- runif(n, 0.8, 0.95)
+  p[1:10] <- NA
+  res <- sffdr(p, fpi0, verbose = FALSE)
+  expect_error(pl <- plot(res, rng = c(0, 1e-3)), NA)
+  expect_s3_class(pl, "ggplot")
+})
+
+test_that("identical p-values are perfect-LD copies unless the p-values are rounded", {
+  set.seed(13)
+  u <- c(runif(4000), 10^-runif(1000, 1.7, 8))
+  p <- rep(u, each = 4)
+  copies <- sffdr:::.ld_copies(p)
+  expect_equal(sum(copies), 15000)
+  expect_false(any(copies[!duplicated(p)]))
+  # rounded p-values tie almost only in the bulk: not copies
+  p_r <- signif(c(runif(100000), 10^-runif(5000, 1.7, 8)), 4)
+  expect_gt(sum(duplicated(p_r)), 1000)
+  expect_false(any(sffdr:::.ld_copies(p_r)))
+  expect_false(any(sffdr:::.ld_copies(round(runif(50000), 3))))
+  # full precision without ties: nothing to collapse
+  expect_false(any(sffdr:::.ld_copies(u)))
+})
+
+test_that("sffdr fits the density on one point per set of perfect-LD copies", {
+  set.seed(14)
+  nb <- 10000
+  b <- 5
+  u <- c(runif(nb - 500), 10^-runif(500, 2, 8))
+  p <- rep(u, each = b)
+  fpi0 <- rep(runif(nb, 0.8, 0.95), each = b)
+  expect_message(res <- sffdr(p, fpi0), "share their p-value")
+  expect_true(all(is.finite(res$fpvalues)))
+  # copies of one SNP get (near) identical local FDRs
+  expect_lt(max(abs(res$flfdr[seq(1, nb * b, b)] - res$flfdr[seq(2, nb * b, b)])), 0.05)
+})
+
+test_that("functional p-values are calibrated under the global null", {
+  skip_on_cran()
+  set.seed(15)
+  n <- 60000
+  p <- runif(n)
+  z <- runif(n)
+  fpi0 <- runif(n, 0.85, 0.95)
+  res <- sffdr(p, fpi0, surrogate = z, verbose = FALSE)
+  t1 <- mean(res$fpvalues < 1e-2) / 1e-2
+  t2 <- mean(res$fpvalues < 1e-3) / 1e-3
+  expect_gt(t1, 0.8)
+  expect_lt(t1, 1.25)
+  expect_gt(t2, 0.6)
+  expect_lt(t2, 1.5)
+  expect_equal(sum(res$fqvalues <= 0.05), 0)
 })

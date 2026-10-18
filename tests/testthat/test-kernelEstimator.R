@@ -17,7 +17,7 @@ test_that("kernelEstimator works with 2D (p-values + covariate)", {
   # Create realistic GWAS-like data with signal
   z <- c(runif(4000, 0.1, 1), runif(1000, 0, 0.01)) # 20% signal in tail
   p <- c(runif(4000, 0.1, 1), runif(1000, 0, 0.01)) # Signal has small p-values
-  x_mat <- cbind(p, z)
+  x_mat <- cbind(z, p) # covariate first, p-values second
 
   result <- kernelEstimator(x_mat)
 
@@ -82,7 +82,7 @@ test_that("kernelEstimator downsampling works correctly", {
   # Create data with clear tail structure
   z <- c(runif(8000, 0, 1), runif(2000, 0.01, 0.1))
   p <- c(runif(8000, 0.1, 1), runif(2000, 0, 0.01))
-  x_mat <- cbind(p, z)
+  x_mat <- cbind(z, p) # covariate first, p-values second
 
   # Use smaller target to force downsampling
   result <- kernelEstimator(x_mat, target_null = 5000)
@@ -97,7 +97,7 @@ test_that("kernelEstimator tail prioritization works", {
   # Create data with strong signal in tails
   z <- c(runif(8000, 0, 1), runif(2000, 0.01, 0.05))
   p <- c(runif(8000, 0.1, 1), runif(2000, 0, 0.01))
-  x_mat <- cbind(p, z)
+  x_mat <- cbind(z, p) # covariate first, p-values second
 
   result <- kernelEstimator(x_mat, tail_threshold = -2)
 
@@ -122,15 +122,50 @@ test_that("kernelEstimator handles matrix with wrong dimensions", {
   expect_error(kernelEstimator(x_wrong), "at least 2 columns")
 })
 
-test_that("kernelEstimator handles all identical values", {
-  p <- rep(0.5, 100)
-
-  suppressWarnings({
-    result <- kernelEstimator(p)
-  })
-
-  expect_s3_class(result, "data.frame")
+test_that("kernelEstimator handles tied values without crashing", {
+  # these inputs crashed R (locfit segfault) before 1.1.4
+  set.seed(123)
+  p <- c(c(0, 1e-320, 0.5, 0.999999, 1.0), runif(50))
+  result <- suppressWarnings(kernelEstimator(p, epsilon = 1e-15, epsilon.max = 1 - 1e-4))
   expect_true(all(is.finite(result$fx)))
+  expect_equal(nrow(result), length(p))
+
+  p <- c(rep(0.001, 50), runif(50))
+  result <- suppressWarnings(kernelEstimator(p))
+  expect_true(all(is.finite(result$fx)))
+
+  # tied values are one point each with their multiplicity: copies get the
+  # same density, and without ties the fit is as before
+  set.seed(5)
+  u <- runif(200)
+  p <- rep(u, each = 3)
+  r1 <- kernelEstimator(p)
+  expect_true(all(is.finite(r1$fx)))
+  expect_equal(r1$fx[seq(1, 600, 3)], r1$fx[seq(2, 600, 3)])
+  set.seed(1)
+  r2 <- kernelEstimator(u)
+  set.seed(1)
+  r3 <- kernelEstimator(u, eval.points = u)
+  expect_equal(r2$fx, r3$fx)
+})
+
+test_that("kernelEstimator refuses arguments the cascade sets", {
+  p <- runif(500)
+  z <- runif(500)
+  expect_error(kernelEstimator(cbind(z, p), kern = "gauss"), "cannot be passed")
+  expect_error(kernelEstimator(cbind(z, p), deg = 1), "cannot be passed")
+})
+
+test_that("kernelEstimator refits with more space when maxk is too small", {
+  set.seed(123)
+  n <- 20000
+  z <- runif(n)
+  p <- c(runif(n - 1000), 10^-runif(1000, 2, 8))
+  set.seed(1)
+  r1 <- kernelEstimator(cbind(z, p), verbose = FALSE)
+  set.seed(1)
+  r2 <- kernelEstimator(cbind(z, p), maxk = 10, verbose = FALSE)
+  expect_equal(r1$fx, r2$fx)
 })
 
 test_that("kernelEstimator handles very small sample sizes", {
@@ -184,7 +219,7 @@ test_that("kernelEstimator cascade fallback works", {
   n <- 5000
   z <- c(runif(4000, 0, 1), runif(1000, 0.01, 0.1))
   p <- c(runif(4000, 0.1, 1), runif(1000, 0, 0.01))
-  x_mat <- cbind(p, z)
+  x_mat <- cbind(z, p) # covariate first, p-values second
 
   # Should fall back through strategies if needed
   result <- kernelEstimator(x_mat)

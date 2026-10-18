@@ -4,14 +4,17 @@
 #' Generates a natural spline model for the functional proportion of null tests (fpi0) by
 #' adaptively selecting knots based on an FDR threshold.
 #'
-#' @param z Matrix/data.frame of p-values (rows=tests, cols=traits).
-#' @param indep_snps Logical, numeric, or character vector indicating independent SNPs (training subset).
-#'   If NULL, uses all tests. Default: NULL.
-#' @param weights Optional numeric vector of weights (e.g., inverse LD scores) for weighted spline fitting. Default: NULL.
+#' @param z Numeric matrix/data.frame of p-values (rows=tests, cols=traits).
+#' @param indep_snps Independent SNPs (the training subset): a logical vector
+#'   with one entry per row of \code{z}, row indices, or SNP ids matched
+#'   against \code{rownames(z)}. If NULL, uses all tests. Default: NULL.
+#' @param weights Optional numeric vector of weights in (0, 1] (e.g., inverse LD scores) for weighted spline fitting. Default: NULL.
 #' @param fdr_threshold FDR threshold for signal definition. Default: 0.25.
-#' @param min_discoveries Min (LD-independent) significant hits required to include trait. Default: 150.
+#' @param min_discoveries Min (LD-independent) significant hits required to place
+#'   a trait's knots from its discoveries; with fewer, the trait keeps a single
+#'   fallback knot. Default: 150.
 #' @param n_knots Target knot count. Default: 5. Automatically reduced if insufficient
-#'   discoveries (via \code{min_snps_per_knot}) or capped by \code{max_knots}.
+#'   discoveries (via \code{min_snps_per_knot}).
 #' @param min_snps_per_knot Base minimum significant SNPs per knot interval. Default: 100.
 #'   Dynamically scales up for larger datasets to prevent overfitting.
 #' @param verbose Print selection details. Default: TRUE.
@@ -20,6 +23,11 @@
 #' @details
 #' Independent SNPs determine knot placement; all SNPs train the model to capture signal shape.
 #' For smaller datasets (<100K), consider reducing \code{min_snps_per_knot} and \code{min_discoveries} to improve knot placement.
+#' Every column must hold p-values: the knots of a column are placed at the
+#' quantiles of its discoveries (\code{\link[qvalue]{qvalue}} at
+#' \code{fdr_threshold}), and a column with values outside [0, 1] gets the
+#' fallback knot with a warning. A null anchor knot at rank 0.1 is always
+#' added.
 #'
 #' @return List containing:
 #' \item{fmod}{Model formula (using \code{splines::ns})}
@@ -53,6 +61,12 @@ pi0_model <- function(
   }
 
   z <- as.matrix(z)
+  if (!is.numeric(z)) {
+    stop("'z' must be numeric: p-values with one row per test and one column per informative study.")
+  }
+  if (!is.null(weights) && length(weights) != nrow(z)) {
+    stop("'weights' must have one entry per row of 'z'.")
+  }
   z_ranked <- apply(z, 2, function(col) {
     n_valid <- sum(!is.na(col))
     if (n_valid == 0) {
@@ -71,32 +85,9 @@ pi0_model <- function(
   z_train_raw <- z
   z_train_ranked <- z_ranked
 
+  # The training set: logical, row indices, or SNP ids (row names of z)
   use_indep <- !is.null(indep_snps)
-  if (use_indep) {
-    if (is.logical(indep_snps) && length(indep_snps) != nrow(z)) {
-      warning(sprintf(
-        "Length mismatch: indep_snps (%d) vs z rows (%d). Ignoring indep_snps.",
-        length(indep_snps),
-        nrow(z)
-      ))
-      use_indep <- FALSE
-    } else if (is.numeric(indep_snps)) {
-      if (
-        any(indep_snps < 1, na.rm = TRUE) ||
-          any(indep_snps > nrow(z), na.rm = TRUE)
-      ) {
-        warning(
-          "Numeric indep_snps contains out-of-bounds indices. Ignoring indep_snps."
-        )
-        use_indep <- FALSE
-      }
-    } else if (is.character(indep_snps) && is.null(rownames(z))) {
-      warning(
-        "Character indep_snps provided, but input data 'z' has no rownames. Ignoring indep_snps."
-      )
-      use_indep <- FALSE
-    }
-  }
+  train <- .train_set(indep_snps, nrow(z), rownames(z))
 
   if (verbose) {
     message("==================================================")
@@ -123,7 +114,7 @@ pi0_model <- function(
   n_eff <- if (!is.null(weights)) {
     sum(weights, na.rm = TRUE)
   } else if (use_indep) {
-    sum(indep_snps, na.rm = TRUE)
+    sum(train)
   } else {
     n_total_snps
   }
@@ -175,23 +166,32 @@ pi0_model <- function(
     }
 
     valid_indices_map <- which(valid_idx)
+    is_indep_check <- train[valid_indices_map]
 
-    qobj <- tryCatch(qvalue::qvalue(raw_vals), error = function(e) NULL)
+    # Knots come from the discoveries in this column, so it must hold p-values
     knot_locs <- numeric(0)
+    if (any(raw_vals < 0 | raw_vals > 1)) {
+      warning(sprintf(
+        "[%s] has values outside [0, 1], so it is not a p-value column: knots cannot be placed from discoveries and the fallback knot is used.",
+        var_name
+      ))
+      qobj <- NULL
+    } else {
+      qobj <- tryCatch(qvalue::qvalue(raw_vals), error = function(e) {
+        warning(sprintf(
+          "[%s]: qvalue() failed (%s); the fallback knot is used.",
+          var_name,
+          conditionMessage(e)
+        ))
+        NULL
+      })
+    }
 
     if (!is.null(qobj)) {
       is_sig <- qobj$qvalues <= fdr_threshold
 
       # Compute effective discovery count
       if (use_indep) {
-        is_indep_check <- logical(length(valid_indices_map))
-        if (is.logical(indep_snps)) {
-          is_indep_check <- indep_snps[valid_indices_map]
-        } else if (is.character(indep_snps)) {
-          is_indep_check <- rownames(z)[valid_indices_map] %in% indep_snps
-        } else {
-          is_indep_check <- valid_indices_map %in% indep_snps
-        }
         n_sig_effective <- sum(is_sig & is_indep_check)
       } else if (!is.null(weights)) {
         n_sig_effective <- sum(w_vals[is_sig])
@@ -297,16 +297,10 @@ pi0_model <- function(
 
     # 3. Apply density-based knot collapsing
     if (length(knot_locs) > 0 && (use_indep || !is.null(weights))) {
-      is_indep_subset <- rep(TRUE, length(valid_indices_map))
-
-      if (use_indep) {
-        if (is.logical(indep_snps)) {
-          is_indep_subset <- indep_snps[valid_indices_map]
-        } else if (is.character(indep_snps)) {
-          is_indep_subset <- rownames(z)[valid_indices_map] %in% indep_snps
-        } else {
-          is_indep_subset <- valid_indices_map %in% indep_snps
-        }
+      is_indep_subset <- if (use_indep) {
+        is_indep_check
+      } else {
+        rep(TRUE, length(valid_indices_map))
       }
 
       indep_ranks_subset <- rank_vals[is_indep_subset]

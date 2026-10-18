@@ -12,7 +12,9 @@ test_that("fpi0est returns valid pi0 estimates", {
   result <- fpi0est(p, z = mpi0$zt, pi0_model = mpi0$fmod, verbose = FALSE)
 
   # Check return structure matches actual output
-  expect_named(result, c("fpi0", "tableLambda", "MISE", "lambda"))
+  expect_named(result, c("fpi0", "tableLambda", "MISE", "lambda", "model"))
+  expect_named(result$tableLambda, c("lambda", "MISE", "mean_fpi0", "chosen"))
+  expect_s3_class(result$model, "fastglm2")
   expect_true(all(result$fpi0 >= 0 & result$fpi0 <= 1))
   expect_true(result$lambda > 0 & result$lambda < 1)
 })
@@ -246,3 +248,37 @@ test_that("fpi0est handles small datasets", {
 #     message("\nFAIL: The weights did not protect the spline.")
 #   }
 # })
+
+test_that("fpi0est takes indep_snps as logical, indices or SNP ids, and checks inputs", {
+  data(bmi)
+  p <- sumstats$bmi
+  z <- as.matrix(sumstats[, -1])
+  rownames(z) <- paste0("rs", seq_len(nrow(z)))
+  mpi0 <- pi0_model(z, min_discoveries = 100, min_snps_per_knot = 50, verbose = FALSE)
+  set.seed(4)
+  keep <- runif(length(p)) < 0.6
+  r_log <- fpi0est(p, mpi0, indep_snps = keep, verbose = FALSE)
+  r_idx <- fpi0est(p, mpi0, indep_snps = which(keep), verbose = FALSE)
+  r_id <- fpi0est(p, mpi0, indep_snps = rownames(z)[keep], verbose = FALSE)
+  expect_equal(r_log$fpi0, r_idx$fpi0)
+  expect_equal(r_log$fpi0, r_id$fpi0)
+  expect_error(fpi0est(p[-1], mpi0, verbose = FALSE), "one entry per row")
+  expect_error(fpi0est(p, mpi0, indep_snps = keep[-1], verbose = FALSE), "one entry per SNP")
+  expect_error(fpi0est(p, mpi0, weights = runif(10), verbose = FALSE), "one entry per p-value")
+  expect_error(fpi0est(p, mpi0, lambda = c(0.5, 1), verbose = FALSE), "\\(0, 1\\)")
+  expect_error(fpi0est(p, mpi0, lambda = 0, verbose = FALSE), "\\(0, 1\\)")
+  expect_warning(fpi0est(p, mpi0, weights = runif(length(p), 1, 50), verbose = FALSE), "clamped")
+})
+
+test_that("fpi0est gives fpi0 = 1 to tests with missing values and keeps the model", {
+  data(bmi)
+  p <- sumstats$bmi
+  z <- as.matrix(sumstats[, -1])
+  mpi0 <- pi0_model(z, min_discoveries = 100, min_snps_per_knot = 50, verbose = FALSE)
+  p[1:5] <- NA
+  res <- fpi0est(p, mpi0, verbose = FALSE)
+  expect_equal(res$fpi0[1:5], rep(1, 5))
+  expect_true(all(res$fpi0 >= 0.01))
+  pred <- predict(res$model, newdata = mpi0$zt[6:10, , drop = FALSE], type = "response") / (1 - res$lambda)
+  expect_equal(unname(pmax(pmin(pred, 1), 0.01)), res$fpi0[6:10])
+})

@@ -7,7 +7,8 @@
 fpvalues(lfdr, p = NULL)
 }
 \arguments{
-\item{lfdr}{A vector of functional local FDRs.}
+\item{lfdr}{A vector of functional local FDRs in [0, 1] (values above 1 are
+clamped to 1).}
 
 \item{p}{A vector of p-values for ranking purposes. Default is NULL.}
 }
@@ -18,4 +19,13 @@ A list containing:
 }
 \description{
 Calculate functional p-values from functional local FDRs.
+}
+\details{
+Tests are ranked by \code{lfdr}, with ties broken by \code{p}. The
+functional q-value of a test is the mean \code{lfdr} of the tests ranked at
+or above it, and its functional p-value is the \code{lfdr} mass ranked at
+or above it as a fraction of the total mass. Tests with identical
+\code{lfdr} and \code{p} are one set: each receives the set's values, so
+the result does not depend on the order of the input. When \code{p} is
+NULL, ties are broken at random.
 }

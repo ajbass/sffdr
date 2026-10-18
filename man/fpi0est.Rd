@@ -34,13 +34,16 @@ Required if \code{pi0_model_obj} is not provided. Default is NULL.}
 \item{pi0_model}{Optional formula (as character string or formula object).
 Required if \code{pi0_model_obj} is not provided. Default is NULL.}
 
-\item{indep_snps}{Optional logical vector indicating independent SNPs for
-model fitting. Default is NULL (all SNPs used).}
+\item{indep_snps}{Optional independent SNPs for model fitting: a logical
+vector with one entry per p-value, row indices, or SNP ids matched against
+\code{rownames(z)}. Default is NULL (all SNPs used).}
 
-\item{weights}{Optional numeric vector of weights for density estimation. For GWAS data, this should be inverse LD scores. If these are available
+\item{weights}{Optional numeric vector of weights in (0, 1], one per p-value,
+for the model fit. For GWAS data, this should be inverse LD scores (values
+above 1 are clamped to 1 with a warning). If these are available
 then you don't have to use the indep_snps argument, as the weights will effectively prioritize independent SNPs in the fitting process.}
 
-\item{lambda}{Numeric vector of lambda thresholds. Default is \code{seq(0.05, 0.95, 0.05)}.}
+\item{lambda}{Numeric vector of lambda thresholds in (0, 1). Default is \code{seq(0.05, 0.95, 0.05)}.}
 
 \item{constrained.p}{Logical; use constrained binomial family. Default is TRUE.}
 
@@ -59,10 +62,14 @@ on Windows this falls back to sequential execution. Default is 1L.}
 \value{
 An object of class \code{fpi0} (a list) containing:
 \describe{
-  \item{fpi0}{Numeric vector of functional pi0 estimates for each test.}
-  \item{tableLambda}{A data frame summarizing results for each lambda value.}
-  \item{MISE}{The Mean Integrated Squared Error (MISE) for the chosen model.}
+  \item{fpi0}{Numeric vector of functional pi0 estimates for each test,
+    floored at 0.01. Tests with a missing p-value or covariate get 1.}
+  \item{tableLambda}{A data frame with one row per lambda value: the
+    MISE, the mean fitted pi0 and whether it was chosen.}
+  \item{MISE}{The Mean Integrated Squared Error (MISE) at each lambda.}
   \item{lambda}{The selected optimal lambda value.}
+  \item{model}{The fitted model at the selected lambda (class
+    \code{fastglm2}; \code{predict()} gives \eqn{P(p \ge \lambda | z)}).}
 }
 }
 \description{

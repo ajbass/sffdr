@@ -3,7 +3,9 @@
 #'  Graphical display of the sffdr object
 #'
 #' @param x A sffdr object.
-#' @param rng Significance region to show. Optional.
+#' @param rng Significance region to show (functional p-value range). Optional.
+#'   If no functional p-value falls in it, the range is widened to the smallest
+#'   one percent.
 #' @param \ldots Additional arguments. Currently unused.
 #'
 #' @return
@@ -39,19 +41,17 @@
 #' @export
 plot.sffdr <- function(x, rng = c(0, 5e-8), ...) {
   z <- pvalue <- fpvalue <- threshold <- sig <- fqvalue <- NULL
-  rm_na <- !is.na(x$pvalues)
+  # tests with a functional p-value (those with a p-value and an fpi0)
+  rm_na <- !is.na(x$fpvalues)
   pvalues <- x$pvalues[rm_na]
   qvalues <- x$fqvalues[rm_na]
   fpvalues <- x$fpvalues[rm_na]
+  pi0 <- x$fpi0[rm_na]
 
   fp.ord <- fpvalues[order(fpvalues)]
   if (min(fp.ord) > rng[2]) {
     rng <- c(min(fp.ord), quantile(fp.ord, 1e-2))
   }
-
-  p.ord <- pvalues[fp.ord]
-
-  pi0 <- x$fpi0
 
   pi0.df <- data.frame(
     z = rank(pi0, ties.method = "random")[which(
@@ -130,7 +130,8 @@ plot.sffdr <- function(x, rng = c(0, 5e-8), ...) {
       strip.background = element_rect(fill = NA),
       legend.background = element_blank(),
       legend.key = element_blank(),
-      legend.position = c(.25, .9),
+      legend.position = "inside",
+      legend.position.inside = c(.25, .9),
       legend.text = element_text(size = 7)
     )
 
@@ -145,11 +146,9 @@ plot.sffdr <- function(x, rng = c(0, 5e-8), ...) {
     xlab("functional p-value") +
     scale_x_log10() +
     scale_y_log10() +
-    ylab("functional q-value") + #geom_point() +
-    theme_bw() +
+    ylab("functional q-value") +
     geom_line() +
-    theme_bw() +
-    scale_x_log10()
+    theme_bw()
 
   (p1 + p2) /
     (p3 + p4) +

@@ -10,7 +10,9 @@
 \arguments{
 \item{x}{A sffdr object.}
 
-\item{rng}{Significance region to show. Optional.}
+\item{rng}{Significance region to show (functional p-value range). Optional.
+If no functional p-value falls in it, the range is widened to the smallest
+one percent.}
 
 \item{\ldots}{Additional arguments. Currently unused.}
 }

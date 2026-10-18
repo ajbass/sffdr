@@ -17,9 +17,9 @@ fit_bivariate_density(
 )
 }
 \arguments{
-\item{train_s}{2-column matrix on probit scale (p-values, covariate).}
+\item{train_s}{2-column matrix on probit scale (covariate, p-values).}
 
-\item{tail_threshold}{Z-score threshold for signal detection.}
+\item{tail_threshold}{Threshold on the probit p-values for the signal tail.}
 
 \item{target_null}{Maximum null SNPs to retain after downsampling.}
 
@@ -27,16 +27,16 @@ fit_bivariate_density(
 
 \item{maxit}{Maximum iterations for locfit.}
 
-\item{maxk}{Maximum fitting points for locfit.}
+\item{maxk}{Space for locfit's evaluation structure.}
 
 \item{weights}{Optional numeric vector of weights for density estimation.}
 
 \item{verbose}{Logical; whether to print progress messages during fitting.}
 
-\item{...}{Additional arguments for lp().}
+\item{...}{Additional arguments for locfit().}
 }
 \value{
-Fitted locfit object or NULL.
+Fitted locfit object.
 }
 \description{
 Internal helper for 2D kernel density estimation with signal prioritization.
