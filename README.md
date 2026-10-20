@@ -133,8 +133,6 @@ fpi0 <- fpi0est(p, mpi0, indep_snps = indep_snps)
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
 ```
 
-**Note on perfect-LD copies and scale**: SNPs with identical p-values are copies of one signal (perfect LD); `sffdr()` fits the density on one point per set of copies and evaluates it for every SNP (ties from rounded p-values, which sit almost only in the bulk of the distribution, are left alone). The functional p-values are calibrated in the tail when the fitted tail holds tens of thousands of SNPs that are not copies of each other, which is the case at GWAS scale; at 100,000 SNPs in heavy LD the tail estimate is noisy.
-
 **Note on choosing independent SNPs**: There are two strategies: (1)
 prune using plink (e.g., `--indep-pairwise 200kb 1 0.3`) and use the
 pruned set of SNPs as the independent set, or (2) use informed sampling
@@ -143,18 +141,6 @@ latter is likely better when the primary study has low power.
 
 
 ## Advanced usage
-
-### Enforcing monotonicity
-
-The kernel density estimator is adaptive. However, sometimes  artifacts---such as LD---can induce spurious "bumps" in the null region which can impact density estimation.
-
-By default, `sffdr()` enforces a monotone constraint on the density within surrogate bins (bins of ~1,000 SNPs) to stabilize the joint density:
-
-``` r
-sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, monotone = TRUE)   # the default; monotone = FALSE turns it off
-```
-
-While this provides robustness in the null region, users should note it may result in a loss of power in specific cases.
 
 ### Incorporating LD scores
 
