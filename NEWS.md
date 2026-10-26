@@ -1,3 +1,17 @@
+# sffdr (development version)
+
+* New `pi0_model_echisq()`: the fpi0 model for an expected chi-squared
+  covariate (a per-SNP prediction of E[chi^2] from annotations, as in Bass et
+  al. 2026), the companion of `pi0_model()` for a covariate whose signal is at
+  the top and whose null value is known. A natural spline in the rank of the
+  covariate with one knot anchored at the rank of `null_value` (1 by default)
+  and the remaining knots at fixed upper quantiles, pruned until every bin
+  holds `min_snps_per_knot` independent SNPs (or that much weight). Its output
+  goes to `fpi0est()` as `pi0_model_obj`, and the covariate is the natural
+  `surrogate` of `sffdr()`. Annotations (e.g., the LD score) can be included
+  as further columns, each with its own spline, anchored only when the null
+  value lies in its range. Reproduces the manuscript's `pi0_model_anchor()`.
+
 # sffdr 1.1.4
 
 * The density window in `sffdr()` now spans the documented ~5,000 neighbours.

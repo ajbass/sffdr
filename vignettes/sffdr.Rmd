@@ -165,6 +165,24 @@ sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
 
 If the primary and informative studies share participants (e.g., traits measured in the same biobank), pass the signed informative z-scores through `decorrelate_informative()` and use its p-values (`$p2`) as the informative p-values in `pi0_model()`; the primary p-values are used unchanged (see `?decorrelate_informative`).
 
+### Expected $\chi^{2}$ from annotations
+
+When the informative variable is a per-SNP prediction of the expected $\chi^{2}$ statistic from functional annotations (an LD score regression fit; Bass et al. 2026), use `pi0_model_echisq()` in place of `pi0_model()`: the signal of such a variable is at the top and its null value is known ($E[\chi^{2}] = 1$ with no association), so the spline is anchored there with its knots in the upper tail (see `?pi0_model_echisq`). The prediction is also the natural surrogate for the density.
+
+```{r, eval = FALSE}
+mpi0 <- pi0_model_echisq(echisq, indep_snps = indep_snps)
+fpi0 <- fpi0est(p, mpi0, indep_snps = indep_snps)
+sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, surrogate = echisq)
+```
+
+Annotations can be included alongside the expected $\chi^{2}$ (e.g., the LD score, MAF, or annotation LD scores): pass them as further columns and each gets its own spline in its rank with the upper-tail knots, anchored only when the null value lies in its range. With more than one column the surrogate is the estimated functional $\pi_{0}$ (the default of `sffdr()`).
+
+```{r, eval = FALSE}
+mpi0 <- pi0_model_echisq(cbind(echisq = echisq, ld = ld_score), indep_snps = indep_snps)
+fpi0 <- fpi0est(p, mpi0, indep_snps = indep_snps)
+sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
+```
+
 ### Manual Knot Selection and using other informative variables
 
 The selection of knots in the B-spline basis is an important tuning parameter in sffdr. If your surrogate GWAS has extremely high power (very small p-values), we recommend placing more knots at the lower end of the p-value distribution to capture the local density of signals.
