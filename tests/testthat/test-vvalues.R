@@ -89,3 +89,16 @@ test_that("a tied surrogate (few levels) is spread over the training bins: null 
   b <- sffdr(p0, lev, folds = chr, verbose = FALSE); expect_identical(a$fpvalues, b$fpvalues)        # reproducible placement
   cst <- sffdr(p0, rep(.98, m), folds = chr, verbose = FALSE); expect_lte(sum(cst$fpvalues <= 1e-3), 1.5 * 60)
 })
+
+test_that("nfolds groups whole labels into folds of similar size and equals passing the grouped labels", {
+  d <- sim(); f0 <- fit_pi0(d)
+  g <- sffdr:::.group_folds(d$chr, 2)
+  expect_equal(sort(unique(g)), 1:2)
+  expect_true(all(tapply(g, d$chr, function(x) length(unique(x))) == 1))       # a chromosome is never split
+  expect_lte(abs(diff(table(g))), max(table(d$chr)))                           # balanced to within one label
+  a <- sffdr(d$p, f0, folds = d$chr, nfolds = 2, verbose = FALSE)
+  b <- sffdr(d$p, f0, folds = g, verbose = FALSE)
+  expect_identical(a$fpvalues, b$fpvalues); expect_identical(a$folds, g)
+  expect_error(sffdr(d$p, f0, folds = d$chr, nfolds = 1, verbose = FALSE), "nfolds")
+  expect_error(sffdr(d$p, f0, folds = d$chr, nfolds = 6, verbose = FALSE), "nfolds")
+})

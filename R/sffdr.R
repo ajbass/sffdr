@@ -60,7 +60,8 @@
 #' Cross-fitting: when the number of effective tests is much smaller than the
 #' number of SNPs (e.g., imputed data), set \code{folds} to the chromosome
 #' labels to obtain calibrated functional p-values from leave-one-chromosome-out
-#' fits (the v-value construction of Liley and Wallace, 2021).
+#' fits (the v-value construction of Liley and Wallace, 2021); \code{nfolds}
+#' groups the chromosomes into fewer folds.
 #'
 #' @param p.value Numeric vector of p-values to analyze, in [0, 1]. Exact
 #'   zeros are clamped to the smallest positive double with a warning;
@@ -93,6 +94,10 @@
 #'   when the number of effective tests is much smaller than the number of
 #'   SNPs. Default is NULL (no cross-fitting; output identical to earlier
 #'   versions).
+#' @param nfolds Optional integer; with \code{folds}, the number of folds to
+#'   use: the labels are grouped into \code{nfolds} folds of similar size,
+#'   whole labels (chromosomes) kept together. Default is NULL (one fold per
+#'   label).
 #' @param ncores Integer; number of cores for fitting folds in parallel
 #'   (\code{parallel::mclapply}; not on Windows). Default is 1.
 #' @param verbose Logical; print progress messages. Default is TRUE.
@@ -109,8 +114,9 @@
 #' \item{fx}{Joint density estimates at observed (p-value, surrogate) pairs.}
 #' \item{fit}{With \code{keep_fit = TRUE}: the fitted surface (the locfit
 #'   object), the surrogate ranks, their bins and the inputs.}
-#' \item{folds}{The fold labels, if given (\code{fpvalues}, \code{fqvalues},
-#'   \code{flfdr} and \code{fx} are then the cross-fitted values).}
+#' \item{folds}{The fold labels used, if given (\code{fpvalues},
+#'   \code{fqvalues}, \code{flfdr} and \code{fx} are then the cross-fitted
+#'   values).}
 #'
 #' @examples
 #' \dontrun{
@@ -141,7 +147,8 @@
 #' fq <- sffdr_out$fqvalues
 #' flfdr <- sffdr_out$flfdr
 #'
-#' # Cross-fit by chromosome (recommended for imputed data)
+#' # Cross-fit by chromosome (recommended for imputed data); nfolds = 5 groups
+#' # the chromosomes into five folds
 #' sffdr_cv <- sffdr(p, fpi0, folds = chr)
 #' }
 #'
@@ -163,6 +170,7 @@ sffdr <- function(
   seed = 2026,
   keep_fit = FALSE,
   folds = NULL,
+  nfolds = NULL,
   ncores = 1L,
   verbose = TRUE,
   ...
@@ -251,6 +259,7 @@ sffdr <- function(
   # Cross-fit by fold (Liley and Wallace 2021)
   if (!is.null(folds)) {
     if (length(folds) != n) stop("'folds' must have one label per SNP.")
+    if (!is.null(nfolds)) folds <- .group_folds(folds, nfolds)
     if (verbose) message("  Cross-fitting by fold...")
     sv <- rep(NA_real_, n); sv[valid] <- surrogate_var
     cv <- .sffdr_cross(p.value, fpi0, sv, folds, ncores = ncores, verbose = verbose, seed = seed, nn = nn, epsilon = epsilon, ...)

@@ -133,6 +133,15 @@ fpi0 <- fpi0est(p, mpi0, indep_snps = indep_snps)
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
 ```
 
+When the number of effective tests is much smaller than the number of SNPs (e.g., imputed data), we recommend cross-fitting the density by chromosome. To do this, provide the chromosome labels in `folds`: the density is then estimated leave-one-chromosome-out and each SNP is evaluated using the fit that excludes its chromosome, which provides calibrated functional p-values (the v-value construction of Liley and Wallace, 2021). The `nfolds` argument groups the chromosomes into fewer folds (e.g., `nfolds = 5`) to reduce computation time, and `ncores` runs the folds in parallel.
+
+``` r
+# Cross-fit the density by chromosome
+sffdr_cv <- sffdr(p, fpi0 = fpi0$fpi0, folds = chr, ncores = 4)
+```
+
+   **Note on computational time**: Cross-fitting repeats the density estimation once per fold, so leave-one-chromosome-out requires 22 fits: on a single core, about 3 minutes for 1 million SNPs and 30 minutes for 10 million (compared to 11 seconds and 2 minutes for a single fit). Increasing `ncores` divides this time across cores, and `nfolds` reduces the number of fits (e.g., `nfolds = 5` requires five fits). We recommend leave-one-chromosome-out whenever feasible: each SNP is then evaluated using a density estimated without its own chromosome, so no SNP in LD with it contributes to its functional p-value, and each fit uses the largest possible training set (the remaining 21 chromosomes). In our simulations, five folds (groups of chromosomes) provided the same power with slightly less conservative calibration in the far tail. A chromosome should never be split across folds.
+
 **Note on choosing independent SNPs**: There are two strategies: (1)
 prune using plink (e.g., `--indep-pairwise 200kb 1 0.3`) and use the
 pruned set of SNPs as the independent set, or (2) use informed sampling
@@ -168,15 +177,6 @@ sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
 `sffdr()` itself does not use weights: its density is estimated over all tested SNPs, which is the set the functional p-values count errors in, and reweighting that density biases the local FDR (SNPs in LD are each tested, so each counts).
 
   **Note on incorporating LD scores**: As LD scores are available for common reference panels (e.g., 1000 Genomes), they can be easily downloaded to use in sfFDR. If you have LD scores calculated from your data then that's even better. However, it is problematic to use LD scores when the reference panel is not matched to your study population. In that case, the pruning (or informative sampling) strategy discussed above is the best option.
-
-### Cross-fitting for imputed data
-
-When the number of effective tests is much smaller than the number of SNPs (e.g., imputed data), set `folds` to the chromosome labels. The density is then fitted leave-one-chromosome-out and the functional p-values are calibrated (the v-value construction of Liley and Wallace, 2021).
-
-``` r
-# folds: chromosome labels; ncores: fit folds in parallel
-sffdr_cv <- sffdr(p, fpi0, folds = chr, ncores = 4)
-```
 
 ### Sample overlap with the informative studies
 

@@ -39,6 +39,18 @@
   out
 }
 
+## Group fold labels into nfolds folds of similar size, whole labels kept
+## together (largest label first, each to the smallest fold so far).
+.group_folds <- function(folds, nfolds) {
+  nfolds <- as.integer(nfolds)
+  tab <- sort(table(folds[!is.na(folds)]), decreasing = TRUE)
+  if (nfolds < 2L || nfolds > length(tab)) stop("'nfolds' must be between 2 and the number of distinct labels.")
+  size <- numeric(nfolds); grp <- integer(length(tab)); names(grp) <- names(tab)
+  for (i in seq_along(tab)) { k <- which.min(size); grp[i] <- k; size[k] <- size[k] + tab[i] }
+  out <- grp[as.character(folds)]; out[is.na(folds)] <- NA_integer_
+  as.integer(unname(out))
+}
+
 ## Pool pieces of .sffdr_cross run on subsets of folds, then the functional
 ## q-values from the pooled held-out local FDRs.
 .merge_folds <- function(pieces, p, fp_ties = TRUE) {
