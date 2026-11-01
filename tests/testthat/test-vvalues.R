@@ -102,3 +102,13 @@ test_that("nfolds groups whole labels into folds of similar size and equals pass
   expect_error(sffdr(d$p, f0, folds = d$chr, nfolds = 1, verbose = FALSE), "nfolds")
   expect_error(sffdr(d$p, f0, folds = d$chr, nfolds = 6, verbose = FALSE), "nfolds")
 })
+
+test_that("a bin that has not reached the lfdr by the smallest p is credited the range below it", {
+  for (s in c(18, 19)) {                                   # weak scans, uninformative surrogate: the top SNP is not lifted
+    set.seed(s); m <- 20000; u <- runif(m)
+    z <- ifelse(runif(m) < .005, rnorm(m, 0, 1.5), 0) + rnorm(m); p <- 2 * pnorm(-abs(z))
+    a <- sffdr(p, rep(.995, m), surrogate = u, folds = rep(1:5, length.out = m), verbose = FALSE)
+    i <- which.min(p)
+    expect_gte(a$fpvalues[i], p[i] * (1 - 1e-12))
+  }
+})

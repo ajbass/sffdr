@@ -96,11 +96,14 @@ vvalues <- function(object, grid_size = 600L) {
 }
 
 ## t_b(c): the largest p with L_b(p) <= c, linear in probit(p) between grid
-## points; 0 when the bin never reaches c, the grid top when it always does.
+## points; the grid top when the bin always reaches c. A bin that has not
+## reached c by the grid bottom (the smallest p in the scan) is credited the
+## whole range below it: its t lies in (0, smallest p), and the low end would
+## give the scan's top SNP a functional p-value below its own p-value.
 .t_of_c <- function(L, s_p, c) {
   G <- length(s_p)
   i <- findInterval(c, L)
-  out <- numeric(length(c))
+  out <- rep(pnorm(s_p[1]), length(c))
   top <- i >= G; out[top] <- pnorm(s_p[G])
   m <- i >= 1 & !top
   if (any(m)) {
