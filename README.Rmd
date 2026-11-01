@@ -152,6 +152,15 @@ sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
 
   **Note on incorporating LD scores**: As LD scores are available for common reference panels (e.g., 1000 Genomes), they can be easily downloaded to use in sfFDR. If you have LD scores calculated from your data then that's even better. However, it is problematic to use LD scores when the reference panel is not matched to your study population. In that case, the pruning (or informative sampling) strategy discussed above is the best option.
 
+### Cross-fitting for imputed data
+
+When the number of effective tests is much smaller than the number of SNPs (e.g., imputed data), set `folds` to the chromosome labels. The density is then fitted leave-one-chromosome-out and the functional p-values are calibrated (the v-value construction of Liley and Wallace, 2021).
+
+```{r, eval = FALSE}
+# folds: chromosome labels; ncores: fit folds in parallel
+sffdr_cv <- sffdr(p, fpi0, folds = chr, ncores = 4)
+```
+
 ### Sample overlap with the informative studies
 
 If the primary and informative studies share participants (e.g., traits measured in the same biobank), pass the signed informative z-scores through `decorrelate_informative()` and use its p-values (`$p2`) as the informative p-values in `pi0_model()`; the primary p-values are used unchanged (see `?decorrelate_informative`).

@@ -57,6 +57,11 @@
 #' when assessing individual SNP evidence. SNPs with flfdr > 0.5 should
 #' be interpreted cautiously regardless of their functional p-value.
 #'
+#' Cross-fitting: when the number of effective tests is much smaller than the
+#' number of SNPs (e.g., imputed data), set \code{folds} to the chromosome
+#' labels to obtain calibrated functional p-values from leave-one-chromosome-out
+#' fits (the v-value construction of Liley and Wallace, 2021).
+#'
 #' @param p.value Numeric vector of p-values to analyze, in [0, 1]. Exact
 #'   zeros are clamped to the smallest positive double with a warning;
 #'   negative values are an error.
@@ -79,6 +84,17 @@
 #'   original p-value ordering. Default is TRUE.
 #' @param seed Integer; random seed for reproducibility of rank tie-breaking,
 #'   the jitter and the null downsampling in the density fit. Default is 2026.
+#' @param keep_fit Logical; if TRUE, the fitted density surface and the
+#'   surrogate bins are kept in the result (element \code{fit}). Default is
+#'   FALSE; it does not change any other element of the result.
+#' @param folds Optional vector of fold labels (e.g., chromosomes), one per SNP.
+#'   If given, the density is fitted leave-one-fold-out and each SNP is scored
+#'   on the fit that did not see its fold; \code{fpvalues} are then calibrated
+#'   when the number of effective tests is much smaller than the number of
+#'   SNPs. Default is NULL (no cross-fitting; output identical to earlier
+#'   versions).
+#' @param ncores Integer; number of cores for fitting folds in parallel
+#'   (\code{parallel::mclapply}; not on Windows). Default is 1.
 #' @param verbose Logical; print progress messages. Default is TRUE.
 #' @param ... Additional arguments passed to \code{\link{kernelEstimator}}.
 #'
@@ -91,6 +107,10 @@
 #' \item{flfdr}{Functional local false discovery rates.}
 #' \item{fpi0}{Functional pi0 estimates.}
 #' \item{fx}{Joint density estimates at observed (p-value, surrogate) pairs.}
+#' \item{fit}{With \code{keep_fit = TRUE}: the fitted surface (the locfit
+#'   object), the surrogate ranks, their bins and the inputs.}
+#' \item{folds}{The fold labels, if given (\code{fpvalues}, \code{fqvalues},
+#'   \code{flfdr} and \code{fx} are then the cross-fitted values).}
 #'
 #' @examples
 #' \dontrun{
@@ -120,6 +140,9 @@
 #' fp <- sffdr_out$fpvalues
 #' fq <- sffdr_out$fqvalues
 #' flfdr <- sffdr_out$flfdr
+#'
+#' # Cross-fit by chromosome (recommended for imputed data)
+#' sffdr_cv <- sffdr(p, fpi0, folds = chr)
 #' }
 #'
 #' @author Andrew J. Bass
@@ -138,6 +161,9 @@ sffdr <- function(
   monotone_method = c("min", "pava"),
   fp_ties = TRUE,
   seed = 2026,
+  keep_fit = FALSE,
+  folds = NULL,
+  ncores = 1L,
   verbose = TRUE,
   ...
 ) {
@@ -221,6 +247,18 @@ sffdr <- function(
   }
 
   surrogate_var <- if (is.null(surrogate)) fpi0_valid else surrogate[valid]
+
+  # Cross-fit by fold (Liley and Wallace 2021)
+  if (!is.null(folds)) {
+    if (length(folds) != n) stop("'folds' must have one label per SNP.")
+    if (verbose) message("  Cross-fitting by fold...")
+    sv <- rep(NA_real_, n); sv[valid] <- surrogate_var
+    cv <- .sffdr_cross(p.value, fpi0, sv, folds, ncores = ncores, verbose = verbose, seed = seed, nn = nn, epsilon = epsilon, ...)
+    cv <- .merge_folds(list(cv), p.value, fp_ties = fp_ties)
+    if (verbose) { message("  Done."); message("==================================================") }
+    return(structure(list(call = match.call(), pvalues = p.value, fpvalues = cv$fpvalues, fqvalues = cv$fqvalues,
+                          flfdr = cv$flfdr, fpi0 = fpi0, fx = cv$fx, folds = folds), class = "sffdr"))
+  }
 
   # Rank-transform surrogate to percentile scale
   z <- rank(surrogate_var, ties.method = "random") / n_valid
@@ -332,18 +370,37 @@ sffdr <- function(
   fx_out[valid] <- fx_valid
 
   # Return results
-  structure(
-    list(
-      call = match.call(),
-      pvalues = p.value,
-      fpvalues = fpvalues_out,
-      fqvalues = fqvalues_out,
-      flfdr = flfdr_out,
-      fpi0 = fpi0,
-      fx = fx_out
-    ),
-    class = "sffdr"
+  out <- list(
+    call = match.call(),
+    pvalues = p.value,
+    fpvalues = fpvalues_out,
+    fqvalues = fqvalues_out,
+    flfdr = flfdr_out,
+    fpi0 = fpi0,
+    fx = fx_out
   )
+
+  # The fitted surface and the surrogate bins (keep_fit)
+  if (keep_fit) {
+    if (!monotone) {
+      n_bins <- as.integer(max(10, min(1000, floor(n_valid / 1000))))
+      groups <- as.integer(cut(z, breaks = n_bins, labels = FALSE))
+    }
+    out$fit <- list(
+      lfit = attr(kd, "lfit"),
+      z = z,
+      groups = groups,
+      n_bins = n_bins,
+      p = p_valid,
+      fpi0 = fpi0_valid,
+      surrogate = surrogate_var,
+      fx = fx_valid,
+      lfdr = lfdr_valid,
+      valid = valid
+    )
+  }
+
+  structure(out, class = "sffdr")
 }
 
 ## SNPs whose p-value is shared with an earlier SNP: perfect-LD copies, which

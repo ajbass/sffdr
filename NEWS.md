@@ -1,5 +1,11 @@
-# sffdr (development version)
+# sffdr 1.2.0
 
+* `sffdr(folds = chr)` cross-fits the density leave-one-chromosome-out
+  (Liley and Wallace, 2021): calibrated functional p-values when the number
+  of effective tests is much smaller than the number of SNPs (e.g., imputed
+  data). `ncores` fits folds in parallel. Without `folds` the output is
+  identical to 1.1.4.
+* `sffdr(keep_fit = TRUE)` keeps the fitted density surface.
 * New `pi0_model_echisq()`: the fpi0 model for an expected chi-squared
   covariate (a per-SNP prediction of E[chi^2] from annotations, as in Bass et
   al. 2026), the companion of `pi0_model()` for a covariate whose signal is at

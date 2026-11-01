@@ -15,6 +15,9 @@ sffdr(
   monotone_method = c("min", "pava"),
   fp_ties = TRUE,
   seed = 2026,
+  keep_fit = FALSE,
+  folds = NULL,
+  ncores = 1L,
   verbose = TRUE,
   ...
 )
@@ -52,6 +55,20 @@ original p-value ordering. Default is TRUE.}
 \item{seed}{Integer; random seed for reproducibility of rank tie-breaking,
 the jitter and the null downsampling in the density fit. Default is 2026.}
 
+\item{keep_fit}{Logical; if TRUE, the fitted density surface and the
+surrogate bins are kept in the result (element \code{fit}). Default is
+FALSE; it does not change any other element of the result.}
+
+\item{folds}{Optional vector of fold labels (e.g., chromosomes), one per SNP.
+If given, the density is fitted leave-one-fold-out and each SNP is scored
+on the fit that did not see its fold; \code{fpvalues} are then calibrated
+when the number of effective tests is much smaller than the number of
+SNPs. Default is NULL (no cross-fitting; output identical to earlier
+versions).}
+
+\item{ncores}{Integer; number of cores for fitting folds in parallel
+(\code{parallel::mclapply}; not on Windows). Default is 1.}
+
 \item{verbose}{Logical; print progress messages. Default is TRUE.}
 
 \item{...}{Additional arguments passed to \code{\link{kernelEstimator}}.}
@@ -65,6 +82,10 @@ An S3 object of class \code{"sffdr"} containing:
 \item{flfdr}{Functional local false discovery rates.}
 \item{fpi0}{Functional pi0 estimates.}
 \item{fx}{Joint density estimates at observed (p-value, surrogate) pairs.}
+\item{fit}{With \code{keep_fit = TRUE}: the fitted surface (the locfit
+  object), the surrogate ranks, their bins and the inputs.}
+\item{folds}{The fold labels, if given (\code{fpvalues}, \code{fqvalues},
+  \code{flfdr} and \code{fx} are then the cross-fitted values).}
 }
 \description{
 Estimate functional p-values, q-values, and local false discovery rates (lfdr)
@@ -122,6 +143,11 @@ relative to null SNPs. This happens when there is strong prior evidence (fpi0) o
 being non-null. Thus, users should also consider flfdr (and fqvalues) alongside fpvalues
 when assessing individual SNP evidence. SNPs with flfdr > 0.5 should
 be interpreted cautiously regardless of their functional p-value.
+
+Cross-fitting: when the number of effective tests is much smaller than the
+number of SNPs (e.g., imputed data), set \code{folds} to the chromosome
+labels to obtain calibrated functional p-values from leave-one-chromosome-out
+fits (the v-value construction of Liley and Wallace, 2021).
 }
 \examples{
 \dontrun{
@@ -151,6 +177,9 @@ plot(sffdr_out)
 fp <- sffdr_out$fpvalues
 fq <- sffdr_out$fqvalues
 flfdr <- sffdr_out$flfdr
+
+# Cross-fit by chromosome (recommended for imputed data)
+sffdr_cv <- sffdr(p, fpi0, folds = chr)
 }
 
 }
