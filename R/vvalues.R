@@ -4,7 +4,9 @@
 ## fit that did not see its fold (the v-value of Liley and Wallace 2021):
 ## v_i = sum_b W_b t_b(lfdr_i) / sum_b W_b over the surrogate bins b, with W_b
 ## the null mass of the bin and t_b(c) the largest p at which its lfdr curve
-## reaches c. The self-fit version (vvalues()) is internal, for tests.
+## reaches c. A tie in the lfdr (the cap at 1, a flat stretch of a curve) is
+## broken by p inside the region. The self-fit version (vvalues()) is internal,
+## for tests.
 ## ============================================================================
 
 ## Per fold: fit the surface on the other folds, take its bin curves, place the
@@ -114,35 +116,73 @@ vvalues <- function(object, grid_size = 600L) {
   out
 }
 
-## v_i = sum_b W_b t_b(c_i) / sum_b W_b, the SNP's own bin at least its own p
+## a_b(c): the smallest p with L_b(p) >= c, where the bin's stretch at level c
+## starts (= t_b(c) where the curve crosses c); the grid bottom when the curve
+## starts at or above c, the grid top when it never reaches c.
+.a_of_c <- function(L, s_p, c) {
+  G <- length(s_p)
+  i <- findInterval(c, L, left.open = TRUE)
+  out <- rep(pnorm(s_p[1]), length(c))
+  top <- i >= G; out[top] <- pnorm(s_p[G])
+  m <- i >= 1 & !top
+  if (any(m)) {
+    i1 <- i[m]; L1 <- L[i1]; L2 <- L[i1 + 1]
+    out[m] <- pnorm(s_p[i1] + (c[m] - L1) / (L2 - L1) * (s_p[i1 + 1] - s_p[i1]))
+  }
+  out
+}
+
+## sum_b w_b (top - max(a_b, p))_+ for each p: the null mass of the bins' stretches at lfdr 1 above p
+.cap_share <- function(a, w, top, p) {
+  k <- a < top; a <- a[k]; w <- w[k]
+  if (!length(a)) return(numeric(length(p)))
+  o <- order(a); a <- a[o]; w <- w[o]
+  j <- findInterval(p, a)                                       # bins whose stretch starts at or below p
+  w_lo <- c(0, cumsum(w))[j + 1]; wa_hi <- sum(w * a) - c(0, cumsum(w * a))[j + 1]
+  pmax(w_lo * (top - p) + (sum(w) - w_lo) * top - wa_hi, 0)
+}
+
+## v_i = sum_b W_b t_b(c_i) / sum_b W_b over the region {lfdr < c_i} U {lfdr = c_i, P <= p_i}: a bin whose curve sits
+## at c_i on [a_b, t_b] contributes p_i clamped to that stretch, the SNP's own bin at least its own p
 .v_from_curves <- function(cur, c, p, grp, exact_below = 1e-2, n_grid = 5000L) {
   Wn <- cur$W / sum(cur$W); B <- length(Wn); n <- length(c)
   exact <- function(idx) {                                      # the per-bin evaluation, on a subset of SNPs
     v <- numeric(length(idx)); ci <- c[idx]; pi <- p[idx]; gi <- grp[idx]
     for (b in seq_len(B)) {
-      tb <- .t_of_c(cur$lfdr[, b], cur$s_p, ci)
+      a <- .a_of_c(cur$lfdr[, b], cur$s_p, ci)
+      tb <- pmin(.t_of_c(cur$lfdr[, b], cur$s_p, ci), pmax(a, pi))
       own <- gi == cur$ids[b]
-      tb[own] <- pmax(tb[own], pi[own])
+      tb[own] <- pmax(a[own], pi[own])
       v <- v + Wn[b] * tb
     }
     v
   }
   if (n <= n_grid) return(exact(seq_len(n)))
-  # pass 1: V(c) = sum_b Wn_b t_b(c) tabulated on a log grid in c and interpolated (the bulk; the own-bin floor added
-  # per bin on its members); pass 2: the exact per-bin evaluation for every SNP with v at most exact_below
-  lo <- max(min(c[c > 0], na.rm = TRUE), 1e-300); cg <- exp(seq(log(lo) - 1e-9, 0, length.out = n_grid))
-  V <- numeric(n_grid)
+  # pass 1: V(c) = sum_b Wn_b t_b(c) tabulated on a log grid in c and interpolated (the bulk), the own bin's exact term
+  # in place of its share; at the cap every bin's stretch clamped at p (exact). pass 2: the exact per-bin evaluation
+  # for every other SNP with v at most exact_below
+  lo <- max(min(c[c > 0], na.rm = TRUE), 1e-300)                # log grid to 1, and a linear one on [.5, 1] where V is steep
+  cg <- sort(unique(c(exp(seq(log(lo) - 1e-9, 0, length.out = n_grid)), seq(.5, 1, length.out = n_grid)))); G <- length(cg)
+  V <- numeric(G)
   for (b in seq_len(B)) V <- V + Wn[b] * .t_of_c(cur$lfdr[, b], cur$s_p, cg)
-  lc <- log(pmin(pmax(c, lo), 1)); i <- pmin(pmax(findInterval(lc, log(cg)), 1L), n_grid - 1L)
+  a1 <- vapply(seq_len(B), function(b) .a_of_c(cur$lfdr[, b], cur$s_p, 1), numeric(1))
+  V1 <- V[G]; V[G] <- sum(Wn * a1)                              # V just below the cap: its jump is not spread over the last interval
+  lc <- log(pmin(pmax(c, lo), 1)); i <- pmin(pmax(findInterval(lc, log(cg)), 1L), G - 1L)
   w <- pmin(pmax((lc - log(cg)[i]) / (log(cg)[i + 1L] - log(cg)[i]), 0), 1)
-  vlo <- V[i]                                                   # V at the grid point below c: a lower bound on V(c)
+  vlo <- V[i]                                                   # V at the grid point below c: a lower bound on v
   v <- V[i] * (1 - w) + V[i + 1L] * w
-  for (b in seq_len(B)) {
+  top <- pnorm(cur$s_p[length(cur$s_p)])
+  cap <- which(c >= 1)
+  if (length(cap)) v[cap] <- V1 - .cap_share(a1, Wn, top, p[cap])
+  for (b in seq_len(B)) {                                       # the own bin: its exact term in place of its interpolated share
     own <- which(grp == cur$ids[b]); if (!length(own)) next
-    tb <- .t_of_c(cur$lfdr[, b], cur$s_p, c[own]); v[own] <- v[own] + Wn[b] * pmax(0, p[own] - tb)
+    Lb <- cur$lfdr[, b]; ib <- i[own]
+    t_hi <- .t_of_c(Lb, cur$s_p, cg[ib + 1L]); t_hi[ib + 1L == G] <- a1[b]
+    ti <- (1 - w[own]) * .t_of_c(Lb, cur$s_p, cg[ib]) + w[own] * t_hi
+    v[own] <- v[own] + Wn[b] * ifelse(c[own] < 1, pmax(.a_of_c(Lb, cur$s_p, c[own]), p[own]) - ti, pmax(0, p[own] - top))
   }
-  v <- pmin(v, 1)                                               # the grid value plus the own-bin floor can overshoot at a plateau
-  redo <- which(vlo <= exact_below)                             # every SNP whose exact v can be at most exact_below
+  v <- pmin(pmax(v, 0), 1)                                      # the grid value plus the own-bin floor can overshoot at a plateau
+  redo <- which(vlo <= exact_below & c < 1)                     # every other SNP whose exact v can be at most exact_below
   if (length(redo)) v[redo] <- exact(redo)
   v
 }

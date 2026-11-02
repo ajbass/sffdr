@@ -30,14 +30,17 @@ test_that("the model-form functional p-value is the p-value under an uninformati
   top <- d$p <= 1e-3
   expect_lt(median(abs(log10(v[top] / d$p[top]))), log10(1.1))
   expect_lt(max(abs(log10(v[top] / d$p[top]))), log10(2))
-  expect_gt(cor(rank(v), rank(fit$flfdr), method = "spearman"), 0.999)
+  lex <- integer(length(v)); lex[order(fit$flfdr, d$p)] <- seq_along(v)              # the order of the regions: lfdr, then p
+  expect_gt(cor(rank(v), lex), 0.999)
   expect_error(sffdr:::vvalues(sffdr(d$p, rep(0.9, length(d$p)), verbose = FALSE)), "keep_fit")
-  # null-heavy scan: the lfdr reaches 1 early in the tail; those SNPs have v = 1, the steep tail is still the p-value
+  # null-heavy scan: the lfdr reaches 1 early in the tail; within that tie v is ordered by p and at least p, the steep
+  # tail is still the p-value
   set.seed(3); m <- 50000; nonnull <- runif(m) < 0.01
   p <- 2 * pnorm(-abs(ifelse(nonnull, rnorm(m, 0, 4), 0) + rnorm(m)))
   fit <- sffdr(p, rep(0.99, m), keep_fit = TRUE, verbose = FALSE); v <- sffdr:::vvalues(fit)
   sel <- p <= 1e-2 & fit$flfdr >= 1
-  expect_gt(sum(sel), 20); expect_true(all(v[sel] >= 1 - 1e-3))
+  expect_gt(sum(sel), 20); expect_true(all(v[sel] >= p[sel] * (1 - 1e-12)))
+  expect_true(all(diff(v[sel][order(p[sel])]) >= -1e-15))
   tail <- p <= 1e-4
   expect_lt(median(abs(log10(v[tail] / p[tail]))), log10(1.1))
 })
@@ -79,6 +82,8 @@ test_that("the fit-only surface is the surface sffdr(keep_fit = TRUE) keeps, and
   v_two <- sffdr:::.v_from_curves(cb, pl$lfdr, d$p[te], pl$grp, n_grid = 100L)      # forces the grid pass at this size
   sel <- v_exact <= 1e-2
   expect_gt(sum(sel), 10); expect_equal(v_two[sel], v_exact[sel], tolerance = 1e-12)
+  cap <- pl$lfdr >= 1                                                                # the cap is exact in the grid pass
+  expect_gt(sum(cap), 100); expect_equal(v_two[cap], v_exact[cap], tolerance = 1e-12)
   expect_true(all(v_two >= 0 & v_two <= 1))
 })
 
@@ -111,4 +116,22 @@ test_that("a bin that has not reached the lfdr by the smallest p is credited the
     i <- which.min(p)
     expect_gte(a$fpvalues[i], p[i] * (1 - 1e-12))
   }
+})
+
+test_that("a tie in the lfdr is broken by p inside the region: no atom at 1, uniform under the null, copies share values", {
+  s_p <- qnorm(c(1e-6, 1e-4, 1e-2, .1, .5)); L1 <- c(.2, .5, .5, .8, 1); L2 <- c(.1, .3, .6, .9, 1)
+  expect_equal(sffdr:::.a_of_c(L1, s_p, .5), 1e-4); expect_equal(sffdr:::.t_of_c(L1, s_p, .5), 1e-2)  # the stretch at .5
+  expect_equal(sffdr:::.a_of_c(L1, s_p, .35), sffdr:::.t_of_c(L1, s_p, .35))                       # a crossing: one point
+  expect_equal(sffdr:::.a_of_c(L1, s_p, .1), 1e-6)
+  cur <- list(s_p = s_p, lfdr = cbind(L1, L2), W = c(1, 1), ids = 1:2)
+  a2 <- sffdr:::.a_of_c(L2, s_p, .5)
+  expect_equal(sffdr:::.v_from_curves(cur, c(.5, .5), c(1e-3, 5e-2), c(2, 1)), c((1e-3 + max(a2, 1e-3)) / 2, (5e-2 + a2) / 2))
+  set.seed(4); m <- 60000; nb <- m / 5                         # null genome in blocks of 5 exact copies (same p and fpi0)
+  p <- rep(runif(nb), each = 5); f0 <- rep(1 - .02 * runif(nb), each = 5); chr <- rep(rep(1:6, length.out = nb), each = 5)
+  a <- sffdr(p, f0, folds = chr, verbose = FALSE)
+  cap <- a$flfdr >= 1
+  expect_gt(mean(cap), .5); expect_lt(mean(a$fpvalues > .999), .01)
+  expect_true(all(a$fpvalues[cap] >= pmin(p[cap], 1 - 1e-4) * (1 - 1e-12)))      # at least p below the grid top
+  for (t in c(.05, .2, .5)) expect_lt(abs(mean(a$fpvalues <= t) / t - 1), .1)
+  expect_true(all(tapply(a$fpvalues, rep(seq_len(nb), each = 5), function(x) diff(range(x)) == 0)))
 })
