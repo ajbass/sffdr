@@ -174,8 +174,9 @@ vvalues <- function(object, grid_size = 600L) {
   top <- pnorm(cur$s_p[length(cur$s_p)])
   cap <- which(c >= 1)
   if (length(cap)) v[cap] <- V1 - .cap_share(a1, Wn, top, p[cap])
+  idx <- split(seq_along(grp), factor(grp, levels = cur$ids))  # each bin's SNPs, in one pass
   for (b in seq_len(B)) {                                       # the own bin: its exact term in place of its interpolated share
-    own <- which(grp == cur$ids[b]); if (!length(own)) next
+    own <- idx[[b]]; if (!length(own)) next
     Lb <- cur$lfdr[, b]; ib <- i[own]
     t_hi <- .t_of_c(Lb, cur$s_p, cg[ib + 1L]); t_hi[ib + 1L == G] <- a1[b]
     ti <- (1 - w[own]) * .t_of_c(Lb, cur$s_p, cg[ib]) + w[own] * t_hi
@@ -216,8 +217,9 @@ vvalues <- function(object, grid_size = 600L) {
   grp <- pmin(pmax(findInterval(z_new, cur$breaks), 1L), fit$n_bins)
   sp <- qnorm(pmin(pmax(p_new, .Machine$double.xmin), 1))
   fx <- rep(NA_real_, length(p_new))
+  idx <- split(seq_along(grp), factor(grp, levels = cur$ids))  # each bin's SNPs, in one pass
   for (b in seq_along(cur$ids)) {
-    i <- which(grp == cur$ids[b])
+    i <- idx[[b]]
     if (length(i)) fx[i] <- approx(cur$s_p, cur$fx[, b], xout = sp[i], rule = 2)$y
   }
   miss <- is.na(fx)                                   # a bin empty in training: nearest bin's curve

@@ -527,7 +527,7 @@ fit_strategy_final <- function(
 
     fatal <- FALSE
     fit_fun <- function(maxk_use) {
-      withCallingHandlers(
+      withRestarts(withCallingHandlers(
         {
           locfit(
             ~ lp(V1, V2, nn = s$nn, h = s$h, deg = s$deg), # <-- h goes inside lp()
@@ -551,10 +551,11 @@ fit_strategy_final <- function(
           ) {
             fatal <<- TRUE
             last_error <<- msg
+            invokeRestart("fatal_fit")                # rejected anyway: stop the fit here
           }
           invokeRestart("muffleWarning")
         }
-      )
+      ), fatal_fit = function() NULL)
     }
     res <- .fit_with_maxk(fit_fun, maxk)
     fit <- res$fit
