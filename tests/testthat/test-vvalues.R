@@ -118,6 +118,31 @@ test_that("a bin that has not reached the lfdr by the smallest p is credited the
   }
 })
 
+test_that("only the fold whose own SNPs hold the smallest p is credited the range below it", {
+  s_p <- qnorm(c(1e-6, 1e-4, 1e-2, .1, .5)); L <- c(.2, .5, .5, .8, 1)
+  expect_equal(sffdr:::.t_of_c(L, s_p, .1), 1e-6); expect_equal(sffdr:::.t_of_c(L, s_p, .1, credit = FALSE), 0)
+  expect_equal(sffdr:::.t_of_c(L, s_p, .35, credit = FALSE), sffdr:::.t_of_c(L, s_p, .35))
+  skip_on_cran()
+  ns <- asNamespace("sffdr")
+  one <- function(p, f0, folds, f, credit) {                                 # fold f as .sffdr_cross computes it
+    tr <- folds != f; te <- folds == f
+    withr::with_seed(2026, { fit <- ns$.fit_surface(p[tr], f0[tr], f0[tr], seed = 2026); cur <- ns$.bin_curves(fit, p_min = min(p))
+      pl <- ns$.place_on_fit(fit, cur, p_new = p[te], fpi0_new = f0[te], surrogate_new = f0[te]) })
+    ns$.v_from_curves(cur, c = pl$lfdr, p = p[te], grp = pl$grp, credit = credit)
+  }
+  set.seed(19); m <- 20000; u <- runif(m); pi1 <- .005 * 8 * exp(-8 * u) / (1 - exp(-8))
+  z <- ifelse(runif(m) < pi1, rnorm(m, 0, 1.5), 0) + rnorm(m); p <- 2 * pnorm(-abs(z)); f0 <- 1 - pi1
+  folds <- rep(1:5, length.out = m); fm <- folds[which.min(p)]; fo <- setdiff(1:5, fm)[1]
+  a <- sffdr(p, f0, surrogate = f0, folds = folds, verbose = FALSE)
+  expect_identical(a$fpvalues[folds == fm], one(p, f0, folds, fm, TRUE))     # holds the smallest p
+  nc <- one(p, f0, folds, fo, FALSE)
+  expect_identical(a$fpvalues[folds == fo], nc)                              # its training holds it
+  expect_true(any(nc < one(p, f0, folds, fo, TRUE)))
+  p[which(folds == fo)[1]] <- min(p)                                         # tied across two folds: neither credited
+  b <- sffdr(p, f0, surrogate = f0, folds = folds, verbose = FALSE)
+  expect_identical(b$fpvalues[folds == fm], one(p, f0, folds, fm, FALSE))
+})
+
 test_that("a tie in the lfdr is broken by p inside the region: no atom at 1, uniform under the null, copies share values", {
   s_p <- qnorm(c(1e-6, 1e-4, 1e-2, .1, .5)); L1 <- c(.2, .5, .5, .8, 1); L2 <- c(.1, .3, .6, .9, 1)
   expect_equal(sffdr:::.a_of_c(L1, s_p, .5), 1e-4); expect_equal(sffdr:::.t_of_c(L1, s_p, .5), 1e-2)  # the stretch at .5

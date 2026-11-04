@@ -29,7 +29,7 @@
     fit <- .fit_surface(p[tr], fpi0[tr], surrogate[tr], seed = seed, ...)
     cur <- .bin_curves(fit, p_min = p_min, grid_size = grid_size)
     pl <- .place_on_fit(fit, cur, p_new = p[te], fpi0_new = fpi0[te], surrogate_new = surrogate[te])
-    v <- .v_from_curves(cur, c = pl$lfdr, p = p[te], grp = pl$grp)
+    v <- .v_from_curves(cur, c = pl$lfdr, p = p[te], grp = pl$grp, credit = min(p[tr]) > p_min)
     list(idx = which(te), lfdr = pl$lfdr, v = v, fx = pl$fx)
   }
   if (verbose) message(sprintf("  Cross-fitting the density: %d folds%s", length(fold_ids), if (ncores > 1L) sprintf(", %d cores", as.integer(ncores)) else ""))
@@ -99,13 +99,12 @@ vvalues <- function(object, grid_size = 600L) {
 
 ## t_b(c): the largest p with L_b(p) <= c, linear in probit(p) between grid
 ## points; the grid top when the bin always reaches c. A bin that has not
-## reached c by the grid bottom (the smallest p in the scan) is credited the
-## whole range below it: its t lies in (0, smallest p), and the low end would
-## give the scan's top SNP a functional p-value below its own p-value.
-.t_of_c <- function(L, s_p, c) {
+## reached c by the grid bottom gets the range below it with credit (the fold
+## holding the smallest p), else 0
+.t_of_c <- function(L, s_p, c, credit = TRUE) {
   G <- length(s_p)
   i <- findInterval(c, L)
-  out <- rep(pnorm(s_p[1]), length(c))
+  out <- rep(if (credit) pnorm(s_p[1]) else 0, length(c))
   top <- i >= G; out[top] <- pnorm(s_p[G])
   m <- i >= 1 & !top
   if (any(m)) {
@@ -144,13 +143,13 @@ vvalues <- function(object, grid_size = 600L) {
 
 ## v_i = sum_b W_b t_b(c_i) / sum_b W_b over the region {lfdr < c_i} U {lfdr = c_i, P <= p_i}: a bin whose curve sits
 ## at c_i on [a_b, t_b] contributes p_i clamped to that stretch, the SNP's own bin at least its own p
-.v_from_curves <- function(cur, c, p, grp, exact_below = 1e-2, n_grid = 5000L) {
+.v_from_curves <- function(cur, c, p, grp, exact_below = 1e-2, n_grid = 5000L, credit = TRUE) {
   Wn <- cur$W / sum(cur$W); B <- length(Wn); n <- length(c)
   exact <- function(idx) {                                      # the per-bin evaluation, on a subset of SNPs
     v <- numeric(length(idx)); ci <- c[idx]; pi <- p[idx]; gi <- grp[idx]
     for (b in seq_len(B)) {
       a <- .a_of_c(cur$lfdr[, b], cur$s_p, ci)
-      tb <- pmin(.t_of_c(cur$lfdr[, b], cur$s_p, ci), pmax(a, pi))
+      tb <- pmin(.t_of_c(cur$lfdr[, b], cur$s_p, ci, credit), pmax(a, pi))
       own <- gi == cur$ids[b]
       tb[own] <- pmax(a[own], pi[own])
       v <- v + Wn[b] * tb
@@ -164,7 +163,7 @@ vvalues <- function(object, grid_size = 600L) {
   lo <- max(min(c[c > 0], na.rm = TRUE), 1e-300)                # log grid to 1, and a linear one on [.5, 1] where V is steep
   cg <- sort(unique(c(exp(seq(log(lo) - 1e-9, 0, length.out = n_grid)), seq(.5, 1, length.out = n_grid)))); G <- length(cg)
   V <- numeric(G)
-  for (b in seq_len(B)) V <- V + Wn[b] * .t_of_c(cur$lfdr[, b], cur$s_p, cg)
+  for (b in seq_len(B)) V <- V + Wn[b] * .t_of_c(cur$lfdr[, b], cur$s_p, cg, credit)
   a1 <- vapply(seq_len(B), function(b) .a_of_c(cur$lfdr[, b], cur$s_p, 1), numeric(1))
   V1 <- V[G]; V[G] <- sum(Wn * a1)                              # V just below the cap: its jump is not spread over the last interval
   lc <- log(pmin(pmax(c, lo), 1)); i <- pmin(pmax(findInterval(lc, log(cg)), 1L), G - 1L)
@@ -178,8 +177,8 @@ vvalues <- function(object, grid_size = 600L) {
   for (b in seq_len(B)) {                                       # the own bin: its exact term in place of its interpolated share
     own <- idx[[b]]; if (!length(own)) next
     Lb <- cur$lfdr[, b]; ib <- i[own]
-    t_hi <- .t_of_c(Lb, cur$s_p, cg[ib + 1L]); t_hi[ib + 1L == G] <- a1[b]
-    ti <- (1 - w[own]) * .t_of_c(Lb, cur$s_p, cg[ib]) + w[own] * t_hi
+    t_hi <- .t_of_c(Lb, cur$s_p, cg[ib + 1L], credit); t_hi[ib + 1L == G] <- a1[b]
+    ti <- (1 - w[own]) * .t_of_c(Lb, cur$s_p, cg[ib], credit) + w[own] * t_hi
     v[own] <- v[own] + Wn[b] * ifelse(c[own] < 1, pmax(.a_of_c(Lb, cur$s_p, c[own]), p[own]) - ti, pmax(0, p[own] - top))
   }
   v <- pmin(pmax(v, 0), 1)                                      # the grid value plus the own-bin floor can overshoot at a plateau

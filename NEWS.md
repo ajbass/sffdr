@@ -1,3 +1,11 @@
+# sffdr 1.2.1
+
+* `sffdr(folds = )` credits the range below the smallest p-value only in the
+  fold that holds it. In the other folds it is a training SNP and the
+  functional p-value is exact without the credit. More calls in weak scans with
+  an informative surrogate (28 vs 26 at 5e-8 over 10 genomes), none fewer in
+  any design.
+
 # sffdr 1.2.0
 
 * `sffdr(folds = chr)` cross-fits the density leave-one-chromosome-out
