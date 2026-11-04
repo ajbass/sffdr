@@ -61,7 +61,9 @@
 #' number of SNPs (e.g., imputed data), set \code{folds} to the chromosome
 #' labels to obtain calibrated functional p-values from leave-one-chromosome-out
 #' fits (the v-value construction of Liley and Wallace, 2021); \code{nfolds}
-#' groups the chromosomes into fewer folds.
+#' groups the chromosomes into fewer folds. A SNP beyond the smallest p-value
+#' of the other folds, where the fit has no data, is ranked by its own p-value:
+#' its bin's local FDR at that edge, falling in proportion to p.
 #'
 #' @param p.value Numeric vector of p-values to analyze, in [0, 1]. Exact
 #'   zeros are clamped to the smallest positive double with a warning;

@@ -1,3 +1,12 @@
+# sffdr 1.2.2
+
+* `sffdr(folds = )` ranks a SNP beyond the other folds' smallest p-value by its
+  own p-value (its bin's local FDR at that edge, falling in proportion to p) in
+  place of the density's extrapolation, so a locus alone on its chromosome is
+  no longer lost (200 of 200 locus SNPs at 5e-8 over 10 genomes, against 133).
+  Every other functional p-value moves by at most that p-value (to within the
+  grid cell holding it). `flfdr` and `fqvalues` are unchanged.
+
 # sffdr 1.2.1
 
 * `sffdr(folds = )` credits the range below the smallest p-value only in the

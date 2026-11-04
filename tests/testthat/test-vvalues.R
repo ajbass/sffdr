@@ -128,7 +128,8 @@ test_that("only the fold whose own SNPs hold the smallest p is credited the rang
     tr <- folds != f; te <- folds == f
     withr::with_seed(2026, { fit <- ns$.fit_surface(p[tr], f0[tr], f0[tr], seed = 2026); cur <- ns$.bin_curves(fit, p_min = min(p))
       pl <- ns$.place_on_fit(fit, cur, p_new = p[te], fpi0_new = f0[te], surrogate_new = f0[te]) })
-    ns$.v_from_curves(cur, c = pl$lfdr, p = p[te], grp = pl$grp, credit = credit)
+    rk <- ns$.continue_curves(fit, cur)
+    ns$.v_from_curves(rk, c = ns$.on_curves(rk, pl$grp, p[te], f0[te]), p = p[te], grp = pl$grp, credit = credit)
   }
   set.seed(19); m <- 20000; u <- runif(m); pi1 <- .005 * 8 * exp(-8 * u) / (1 - exp(-8))
   z <- ifelse(runif(m) < pi1, rnorm(m, 0, 1.5), 0) + rnorm(m); p <- 2 * pnorm(-abs(z)); f0 <- 1 - pi1
@@ -159,4 +160,36 @@ test_that("a tie in the lfdr is broken by p inside the region: no atom at 1, uni
   expect_true(all(a$fpvalues[cap] >= pmin(p[cap], 1 - 1e-4) * (1 - 1e-12)))      # at least p below the grid top
   for (t in c(.05, .2, .5)) expect_lt(abs(mean(a$fpvalues <= t) / t - 1), .1)
   expect_true(all(tapply(a$fpvalues, rep(seq_len(nb), each = 5), function(x) diff(range(x)) == 0)))
+})
+
+test_that("below a fold's smallest training p the ranking falls with p: a lone locus is called, nothing else moves", {
+  skip_on_cran()
+  set.seed(1); m <- 20000; p0 <- 2 * pnorm(-abs(ifelse(runif(m) < .01, rnorm(m, 0, 3), 0) + rnorm(m))); f00 <- runif(m, .97, 1)
+  fit <- sffdr:::.fit_surface(p0, f00); e <- min(p0)
+  cur <- sffdr:::.bin_curves(fit, p_min = e / 1e6); rk <- sffdr:::.continue_curves(fit, cur); lo <- cur$s_p < qnorm(e)
+  expect_identical(rk$fx[!lo, ], cur$fx[!lo, ]); expect_identical(rk$lfdr[!lo, ], cur$lfdr[!lo, ])
+  a <- sweep(rk$fx[lo, , drop = FALSE], 1, e / pnorm(cur$s_p[lo]), "/")             # below e: a value at e times e / p
+  expect_lt(max(abs(sweep(a, 2, a[1, ], "/") - 1)), 1e-12); expect_true(all(a[1, ] >= cur$fx[max(which(lo)) + 1L, ]))
+  expect_true(all(apply(rk$fx, 2, function(x) all(diff(x) <= 0))))
+  expect_identical(sffdr:::.continue_curves(fit, sffdr:::.bin_curves(fit, p_min = e)), sffdr:::.bin_curves(fit, p_min = e))
+  ns <- asNamespace("sffdr")
+  set.seed(2); n_chr <- 8; m <- 10000; n <- n_chr * m; chr <- rep(seq_len(n_chr), each = m)
+  z <- rnorm(n); enr <- sample(n, n * .02); bg <- sample(enr, 120L); z[bg] <- rnorm(120L, 0, 2)
+  hit <- setdiff(which(chr == 1), enr)[1:20]; z[hit] <- 7.9 + rnorm(20, 0, .15)
+  p <- 2 * pnorm(-abs(z)); f0 <- ifelse(seq_len(n) %in% enr, .8, .995) * runif(n, .995, 1)
+  a <- sffdr(p, f0, folds = chr, verbose = FALSE)
+  fit_121 <- function(f) {                                                   # fold f ranked by the fit's curves
+    tr <- chr != f; te <- chr == f
+    withr::with_seed(2026, { fit <- ns$.fit_surface(p[tr], f0[tr], f0[tr], seed = 2026); cur <- ns$.bin_curves(fit, p_min = min(p))
+      pl <- ns$.place_on_fit(fit, cur, p_new = p[te], fpi0_new = f0[te], surrogate_new = f0[te]) })
+    list(v = ns$.v_from_curves(cur, c = pl$lfdr, p = p[te], grp = pl$grp, credit = min(p[tr]) > min(p)), lfdr = pl$lfdr,
+         edge = pnorm(cur$s_p[min(which(cur$s_p >= qnorm(min(p[tr]))))]), e = min(p[tr]))
+  }
+  o1 <- fit_121(1); o2 <- fit_121(2); te <- chr == 1
+  expect_identical(a$flfdr[te], o1$lfdr)
+  expect_identical(a$fpvalues[chr == 2], o2$v)
+  expect_true(all(a$fpvalues[hit] <= 5e-8))
+  expect_lt(sum(o1$v[match(hit, which(te))] <= 5e-8), 15)
+  inr <- p[te] >= o1$e & o1$v <= 1e-3 & a$fpvalues[te] <= 1e-3
+  expect_gt(sum(inr), 10); expect_lte(max(abs(a$fpvalues[te][inr] - o1$v[inr])), o1$edge * (1 + 1e-9))
 })

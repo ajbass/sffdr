@@ -5,8 +5,9 @@
 ## v_i = sum_b W_b t_b(lfdr_i) / sum_b W_b over the surrogate bins b, with W_b
 ## the null mass of the bin and t_b(c) the largest p at which its lfdr curve
 ## reaches c. A tie in the lfdr (the cap at 1, a flat stretch of a curve) is
-## broken by p inside the region. The self-fit version (vvalues()) is internal,
-## for tests.
+## broken by p inside the region. Below the fold's smallest training p the
+## ranking falls in proportion to p (the local FDR stays the fit's). The
+## self-fit version (vvalues()) is internal, for tests.
 ## ============================================================================
 
 ## Per fold: fit the surface on the other folds, take its bin curves, place the
@@ -29,7 +30,9 @@
     fit <- .fit_surface(p[tr], fpi0[tr], surrogate[tr], seed = seed, ...)
     cur <- .bin_curves(fit, p_min = p_min, grid_size = grid_size)
     pl <- .place_on_fit(fit, cur, p_new = p[te], fpi0_new = fpi0[te], surrogate_new = surrogate[te])
-    v <- .v_from_curves(cur, c = pl$lfdr, p = p[te], grp = pl$grp, credit = min(p[tr]) > p_min)
+    rk <- .continue_curves(fit, cur)
+    c_rk <- if (identical(rk, cur)) pl$lfdr else .on_curves(rk, pl$grp, p[te], fpi0[te])
+    v <- .v_from_curves(rk, c = c_rk, p = p[te], grp = pl$grp, credit = min(p[tr]) > p_min)
     list(idx = which(te), lfdr = pl$lfdr, v = v, fx = pl$fx)
   }
   if (verbose) message(sprintf("  Cross-fitting the density: %d folds%s", length(fold_ids), if (ncores > 1L) sprintf(", %d cores", as.integer(ncores)) else ""))
@@ -95,6 +98,32 @@ vvalues <- function(object, grid_size = 600L) {
   rz <- range(fit$z); dz <- diff(rz)
   list(s_p = s_p, fx = fx, lfdr = L, W = as.numeric(W), ids = ids,
        breaks = seq(rz[1] - dz / 1000, rz[2] + dz / 1000, length.out = fit$n_bins + 1))
+}
+
+## The ranking: below the fold's smallest training p (e) each bin's density
+## ratio is the fit's at e (before the running minimum) times e / p, above e
+## the fit's curve
+.continue_curves <- function(fit, cur) {
+  e <- min(fit$p); lo <- cur$s_p < qnorm(e); j <- sum(lo) + 1L
+  if (j == 1L || j > length(lo)) return(cur)
+  zb <- qnorm(as.numeric(tapply(fit$z, fit$groups, mean)))
+  fe <- predict(fit$lfit, newdata = data.frame(V1 = zb, V2 = cur$s_p[j]), log = FALSE)
+  fe <- fe / pmax(dnorm(zb) * dnorm(cur$s_p[j]), .Machine$double.xmin)
+  cur$fx[lo, ] <- outer(e / pnorm(cur$s_p[lo]), pmax(fe, cur$fx[j, ]))
+  pi0b <- tapply(fit$fpi0, fit$groups, mean)
+  cur$lfdr[lo, ] <- sweep(cur$fx[lo, , drop = FALSE], 2, as.numeric(pi0b), FUN = function(f, p0) pmin(p0 / f, 1))
+  cur
+}
+
+## lfdr of SNPs placed in bins grp, read off cur
+.on_curves <- function(cur, grp, p, fpi0) {
+  sp <- qnorm(pmin(pmax(p, .Machine$double.xmin), 1)); fx <- rep(NA_real_, length(p))
+  idx <- split(seq_along(grp), factor(grp, levels = cur$ids))
+  for (b in seq_along(cur$ids)) {
+    i <- idx[[b]]
+    if (length(i)) fx[i] <- approx(cur$s_p, cur$fx[, b], xout = sp[i], rule = 2)$y
+  }
+  pmin(fpi0 / pmax(fx, .Machine$double.xmin), 1)
 }
 
 ## t_b(c): the largest p with L_b(p) <= c, linear in probit(p) between grid
