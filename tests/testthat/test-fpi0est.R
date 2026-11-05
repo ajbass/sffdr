@@ -282,3 +282,33 @@ test_that("fpi0est gives fpi0 = 1 to tests with missing values and keeps the mod
   pred <- predict(res$model, newdata = mpi0$zt[6:10, , drop = FALSE], type = "response") / (1 - res$lambda)
   expect_equal(unname(pmax(pmin(pred, 1), 0.01)), res$fpi0[6:10])
 })
+
+test_that("fpi0est is the same with ncores and its model keeps no frame", {
+  data(bmi)
+  p <- sumstats$bmi; z <- as.matrix(sumstats[, -1])
+  mpi0 <- pi0_model(z, min_discoveries = 100, min_snps_per_knot = 50, verbose = FALSE)
+  a <- fpi0est(p, mpi0, verbose = FALSE); b <- fpi0est(p, mpi0, ncores = 2, verbose = FALSE)
+  expect_identical(b$fpi0, a$fpi0); expect_identical(b$tableLambda, a$tableLambda)
+  expect_identical(b$model$coefficients, a$model$coefficients)
+  expect_identical(environment(a$model$terms), asNamespace("sffdr"))
+})
+
+test_that("fpi0est(folds = ) chooses lambda once and predicts each fold from the model refitted on the others", {
+  data(bmi)
+  p <- sumstats$bmi; z <- as.matrix(sumstats[, -1]); n <- length(p)
+  mpi0 <- pi0_model(z, min_discoveries = 100, min_snps_per_knot = 50, verbose = FALSE)
+  folds <- rep(1:4, length.out = n)
+  a <- fpi0est(p, mpi0, verbose = FALSE); b <- fpi0est(p, mpi0, folds = folds, verbose = FALSE)
+  expect_identical(b$lambda, a$lambda); expect_identical(b$tableLambda, a$tableLambda)
+  expect_length(b$fpi0, n); expect_true(all(b$fpi0 >= .01 & b$fpi0 <= 1))
+  tr <- folds != 2; d <- as.data.frame(mpi0$zt); d$phi <- as.numeric(p >= a$lambda)
+  X <- model.matrix(formula(paste("phi", paste(mpi0$fmod, collapse = " "))), d)
+  fit <- fastglm::fastglm(x = X[tr, , drop = FALSE], y = d$phi[tr], family = sffdr:::constrained.binomial(1 - a$lambda), method = 3L, tol = 1e-9, maxit = 200)
+  pr <- pmax(pmin(drop(sffdr:::constrained.binomial(1 - a$lambda)$linkinv(X[!tr, , drop = FALSE] %*% fit$coefficients)) / (1 - a$lambda), 1), .01)
+  expect_equal(b$fpi0[!tr], unname(pr), tolerance = 1e-8)
+  expect_gt(cor(a$fpi0, b$fpi0), .9)
+  expect_identical(fpi0est(p, mpi0, folds = rep(1:8, length.out = n), nfolds = 4, verbose = FALSE)$fpi0,
+                   fpi0est(p, mpi0, folds = sffdr:::.group_folds(rep(1:8, length.out = n), 4), verbose = FALSE)$fpi0)
+  expect_error(fpi0est(p, mpi0, folds = 1:3, verbose = FALSE), "one label per p-value")
+  expect_error(fpi0est(p, mpi0, folds = rep(1, n), verbose = FALSE), "two distinct")
+})

@@ -277,6 +277,10 @@ kernelEstimator <- function(
 #' @param maxk Space for locfit's evaluation structure.
 #' @param weights Optional numeric vector of weights for density estimation.
 #' @param verbose Logical; whether to print progress messages during fitting.
+#' @param tail_box Optional probit p-value: fit only the surface below it
+#'   (cross-fitting's per-fold refit, the bulk coming from one fit on every
+#'   SNP), with the same rows and window; the fit's \code{"scale"} attribute
+#'   is the share of the weight it keeps.
 #' @param ... Additional arguments for locfit().
 #'
 #' @return Fitted locfit object.
@@ -290,6 +294,7 @@ fit_bivariate_density <- function(
   maxk,
   weights = NULL,
   verbose = TRUE,
+  tail_box = NULL,
   ...
 ) {
   if (is.null(weights)) {
@@ -342,8 +347,17 @@ fit_bivariate_density <- function(
 
   h_safe <- max(0.05, 0.5 * (n_eff^(-1 / 6)))
 
-  # 6. Fit Models
-  fit_strategy_final(
+  # 6. Tail only: rows above p = .5 dropped, same window
+  ev <- rbox()
+  if (!is.null(tail_box)) {
+    near <- fit_data$V2 < 0
+    nn_high <- nn_high * n_fit / sum(near); nn_safe <- nn_safe * n_fit / sum(near)
+    fit_data <- fit_data[near, , drop = FALSE]
+    ev <- rbox(ll = c(min(fit_data$V1), min(fit_data$V2)), ur = c(max(fit_data$V1), tail_box))
+  }
+
+  # 7. Fit Models
+  fit <- fit_strategy_final(
     data = fit_data,
     valid_data = valid_data,
     nn_high = nn_high,
@@ -352,8 +366,11 @@ fit_bivariate_density <- function(
     maxit = maxit,
     maxk = maxk,
     verbose = verbose,
+    ev = ev,
     ...
   )
+  if (!is.null(tail_box)) attr(fit, "scale") <- sum(fit_data$w) / n_eff
+  fit
 }
 
 
@@ -435,6 +452,7 @@ fit_univariate_density <- function(
 #' @param maxit Maximum iterations for locfit.
 #' @param maxk Space for locfit's evaluation structure.
 #' @param verbose Logical; print progress messages.
+#' @param ev locfit's evaluation structure (the tree on the data's box).
 #' @param ... Additional arguments passed to locfit().
 #'
 #' @return A fitted locfit object; an error with the last message if every
@@ -449,6 +467,7 @@ fit_strategy_final <- function(
   maxit,
   maxk,
   verbose,
+  ev = rbox(),
   ...
 ) {
   # Subset for validation checks
@@ -472,8 +491,8 @@ fit_strategy_final <- function(
     p_lin <- exp(p_log)
     all(p_lin > 0)
   }
-  # Compute rbox() once and share across all strategies
-  ev_box <- rbox()
+  # One evaluation structure shared across all strategies
+  ev_box <- ev
 
   strats <- list(
     list(

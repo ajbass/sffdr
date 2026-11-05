@@ -36,10 +36,68 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// v_grid
+NumericVector v_grid(NumericMatrix L, NumericVector s, NumericVector cg, NumericVector W, bool credit);
+RcppExport SEXP _sffdr_v_grid(SEXP LSEXP, SEXP sSEXP, SEXP cgSEXP, SEXP WSEXP, SEXP creditSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type L(LSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type s(sSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type cg(cgSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type W(WSEXP);
+    Rcpp::traits::input_parameter< bool >::type credit(creditSEXP);
+    rcpp_result_gen = Rcpp::wrap(v_grid(L, s, cg, W, credit));
+    return rcpp_result_gen;
+END_RCPP
+}
+// v_exact
+NumericVector v_exact(NumericMatrix L, NumericVector s, NumericVector c, NumericVector p, IntegerVector own, NumericVector W, bool credit);
+RcppExport SEXP _sffdr_v_exact(SEXP LSEXP, SEXP sSEXP, SEXP cSEXP, SEXP pSEXP, SEXP ownSEXP, SEXP WSEXP, SEXP creditSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type L(LSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type s(sSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type c(cSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type p(pSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type own(ownSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type W(WSEXP);
+    Rcpp::traits::input_parameter< bool >::type credit(creditSEXP);
+    rcpp_result_gen = Rcpp::wrap(v_exact(L, s, c, p, own, W, credit));
+    return rcpp_result_gen;
+END_RCPP
+}
+// v_own
+NumericVector v_own(NumericMatrix L, NumericVector s, NumericVector cg, IntegerVector i, NumericVector w, NumericVector c, NumericVector p, IntegerVector own, NumericVector W, NumericVector a1, double top, bool credit, NumericVector v);
+RcppExport SEXP _sffdr_v_own(SEXP LSEXP, SEXP sSEXP, SEXP cgSEXP, SEXP iSEXP, SEXP wSEXP, SEXP cSEXP, SEXP pSEXP, SEXP ownSEXP, SEXP WSEXP, SEXP a1SEXP, SEXP topSEXP, SEXP creditSEXP, SEXP vSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericMatrix >::type L(LSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type s(sSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type cg(cgSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type i(iSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type w(wSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type c(cSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type p(pSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type own(ownSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type W(WSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type a1(a1SEXP);
+    Rcpp::traits::input_parameter< double >::type top(topSEXP);
+    Rcpp::traits::input_parameter< bool >::type credit(creditSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type v(vSEXP);
+    rcpp_result_gen = Rcpp::wrap(v_own(L, s, cg, i, w, c, p, own, W, a1, top, credit, v));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_sffdr_monoSmooth_conditional", (DL_FUNC) &_sffdr_monoSmooth_conditional, 3},
     {"_sffdr_monoSmooth_pava", (DL_FUNC) &_sffdr_monoSmooth_pava, 3},
+    {"_sffdr_v_grid", (DL_FUNC) &_sffdr_v_grid, 5},
+    {"_sffdr_v_exact", (DL_FUNC) &_sffdr_v_exact, 7},
+    {"_sffdr_v_own", (DL_FUNC) &_sffdr_v_own, 13},
     {NULL, NULL, 0}
 };
 

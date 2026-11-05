@@ -12,7 +12,7 @@ sim <- function(m = 20000, k = 10, seed = 3) {
        indep = rep(c(TRUE, rep(FALSE, k - 1)), nb), nonnull = nonnull)
 }
 fit_pi0 <- function(d) { mp <- pi0_model(z = data.frame(u = d$u), indep_snps = d$indep, verbose = FALSE)
-  fpi0est(d$p, mp, indep_snps = d$indep, verbose = FALSE)$fpi0 }
+  c(fpi0est(d$p, mp, indep_snps = d$indep, verbose = FALSE)$fpi0) }                 # c(): fpi0 the surrogate, not the covariate
 
 test_that("keep_fit keeps the fit and changes nothing else", {
   d <- sim(); f0 <- fit_pi0(d)
@@ -87,6 +87,60 @@ test_that("the fit-only surface is the surface sffdr(keep_fit = TRUE) keeps, and
   expect_true(all(v_two >= 0 & v_two <= 1))
 })
 
+test_that("a fold refits the tail only, on the same rows and window: the functional p-values of a full refit", {
+  d <- sim(); f0 <- fit_pi0(d); ns <- asNamespace("sffdr"); e <- min(d$p); tr <- d$chr != 1
+  ft <- ns$.fit_surface(d$p[tr], f0[tr], tail = .1); ff <- ns$.fit_surface(d$p[tr], f0[tr])
+  expect_identical(ft[c("z", "groups", "n_bins")], ff[c("z", "groups", "n_bins")]); expect_identical(ff$scale, 1)
+  expect_gt(ft$scale, .4); expect_lt(ft$scale, .6)                                  # the weight below p = .5
+  skip_on_cran()
+  cv <- sffdr(d$p, f0, folds = d$chr, verbose = FALSE); v_full <- rep(NA_real_, length(d$p))
+  for (f in 1:5) {                                                                   # leave-one-fold-out full refits (1.2.3)
+    tr <- d$chr != f; te <- d$chr == f
+    withr::with_seed(2026, { fit <- ns$.fit_surface(d$p[tr], f0[tr], seed = 2026); cur <- ns$.bin_curves(fit, p_min = e)
+      pl <- ns$.place_on_fit(fit, cur, d$p[te], f0[te]) })
+    rk <- ns$.continue_curves(fit, cur)
+    v_full[te] <- ns$.v_from_curves(rk, ns$.on_curves(rk, pl$grp, d$p[te], f0[te]), d$p[te], pl$grp, credit = min(d$p[tr]) > e)
+  }
+  top <- pmin(cv$fpvalues, v_full) <= 1e-3
+  expect_gt(sum(top), 100); expect_gt(cor(log(cv$fpvalues[top]), log(v_full[top])), .99)
+  expect_lt(median(abs(log10(cv$fpvalues[top] / v_full[top]))), log10(1.1))
+  for (t in c(1e-4, 1e-3)) expect_lte(abs(sum(cv$fpvalues <= t) - sum(v_full <= t)), .1 * sum(v_full <= t) + 5)
+})
+
+test_that("pi0 in folds: each fold is scored on its own pi0 model's ranks and pi0, the bulk on the global model's", {
+  d <- sim(); ns <- asNamespace("sffdr"); mp <- pi0_model(z = data.frame(u = d$u), verbose = FALSE)
+  f0 <- fpi0est(d$p, mp, folds = d$chr, verbose = FALSE)$fpi0; pf <- attr(f0, "pi0_folds")
+  attr(f0, "surrogate") <- NULL                                                          # the surrogate of several covariates
+  expect_identical(attr(pf$terms, ".Environment"), ns)
+  expect_equal(ns$.fpi0_of_fold(pf, NULL), c(fpi0est(d$p, mp, verbose = FALSE)$fpi0))
+  cv <- sffdr(d$p, f0, folds = d$chr, verbose = FALSE)
+  expect_null(attributes(cv$fpi0)); expect_equal(cv$flfdr, pmin(c(f0) / cv$fx, 1))      # each SNP's lfdr on its held-out pi0
+  tr <- d$chr != 2; F2 <- ns$.fpi0_of_fold(pf, 2); e <- min(d$p)                          # fold 2 by hand
+  st <- ns$.cross_setup(d$p, c(f0), ns$.fpi0_of_fold(pf, NULL), p_min = e)
+  k <- ns$.cross_fold(d$p, F2, F2, tr, st, p_min = e, own_s = TRUE)
+  expect_identical(cv$fpvalues[!tr], ns$.v_from_curves(k$rk, c = k$c, p = d$p[!tr], grp = k$pl$grp, credit = min(d$p[tr]) > e))
+  cu <- sffdr(d$p, f0, surrogate = d$u, folds = d$chr, verbose = FALSE)                 # a given surrogate: the fold pi0 only
+  expect_equal(cu$flfdr, pmin(c(f0) / cu$fx, 1))
+  expect_lte(sum(cv$fpvalues[!d$nonnull] <= 1e-3), 1.5 * 1e-3 * sum(!d$nonnull) + 5)
+  expect_error(sffdr(d$p, f0, folds = d$chr, nfolds = 2, verbose = FALSE), "other folds")
+  expect_identical(sffdr(d$p, c(f0), verbose = FALSE)$fpvalues, sffdr(d$p, f0, verbose = FALSE)$fpvalues)   # no folds: the values
+})
+
+test_that("a pi0 model with one covariate: the covariate is the default surrogate, SNPs without it at the null end", {
+  d <- sim(); mp <- pi0_model(z = data.frame(u = d$u), indep_snps = d$indep, verbose = FALSE)
+  f0 <- fpi0est(d$p, mp, indep_snps = d$indep, verbose = FALSE)$fpi0
+  expect_identical(attr(f0, "surrogate"), mp$zt$u)
+  expect_identical(sffdr(d$p, f0, verbose = FALSE)$fpvalues, sffdr(d$p, c(f0), surrogate = mp$zt$u, verbose = FALSE)$fpvalues)
+  ff <- fpi0est(d$p, mp, folds = d$chr, verbose = FALSE)$fpi0; fs <- ff; attr(fs, "surrogate") <- NULL
+  expect_identical(sffdr(d$p, ff, folds = d$chr, verbose = FALSE)$fpvalues, sffdr(d$p, fs, surrogate = mp$zt$u, folds = d$chr, verbose = FALSE)$fpvalues)
+  zt <- mp$zt; zt$u[1:50] <- NA
+  fm <- fpi0est(d$p, z = zt, pi0_model = mp$fmod, indep_snps = d$indep, verbose = FALSE)$fpi0
+  expect_equal(c(fm)[1:50], rep(1, 50)); expect_identical(attr(fm, "surrogate")[1:50], rep(Inf, 50))
+  expect_false(anyNA(sffdr(d$p, fm, verbose = FALSE)$fpvalues))
+  two <- fpi0est(d$p, z = data.frame(u = mp$zt$u, w = runif(length(d$p))), pi0_model = "~ u + w", verbose = FALSE)$fpi0
+  expect_null(attr(two, "surrogate"))
+})
+
 test_that("a tied surrogate (few levels) is spread over the training bins: null genomes stay at or below nominal", {
   set.seed(9); m <- 60000; p0 <- runif(m); lev <- sample(c(.95, .97, .99), m, replace = TRUE); chr <- rep(1:6, length.out = m)
   a <- sffdr(p0, lev, folds = chr, verbose = FALSE)
@@ -125,11 +179,8 @@ test_that("only the fold whose own SNPs hold the smallest p is credited the rang
   skip_on_cran()
   ns <- asNamespace("sffdr")
   one <- function(p, f0, folds, f, credit) {                                 # fold f as .sffdr_cross computes it
-    tr <- folds != f; te <- folds == f
-    withr::with_seed(2026, { fit <- ns$.fit_surface(p[tr], f0[tr], f0[tr], seed = 2026); cur <- ns$.bin_curves(fit, p_min = min(p))
-      pl <- ns$.place_on_fit(fit, cur, p_new = p[te], fpi0_new = f0[te], surrogate_new = f0[te]) })
-    rk <- ns$.continue_curves(fit, cur)
-    ns$.v_from_curves(rk, c = ns$.on_curves(rk, pl$grp, p[te], f0[te]), p = p[te], grp = pl$grp, credit = credit)
+    st <- ns$.cross_setup(p, f0, f0, p_min = min(p)); k <- ns$.cross_fold(p, f0, f0, folds != f, st, p_min = min(p))
+    ns$.v_from_curves(k$rk, c = k$c, p = p[folds == f], grp = k$pl$grp, credit = credit)
   }
   set.seed(19); m <- 20000; u <- runif(m); pi1 <- .005 * 8 * exp(-8 * u) / (1 - exp(-8))
   z <- ifelse(runif(m) < pi1, rnorm(m, 0, 1.5), 0) + rnorm(m); p <- 2 * pnorm(-abs(z)); f0 <- 1 - pi1
@@ -178,10 +229,9 @@ test_that("below a fold's smallest training p the ranking falls with p: a lone l
   hit <- setdiff(which(chr == 1), enr)[1:20]; z[hit] <- 7.9 + rnorm(20, 0, .15)
   p <- 2 * pnorm(-abs(z)); f0 <- ifelse(seq_len(n) %in% enr, .8, .995) * runif(n, .995, 1)
   a <- sffdr(p, f0, folds = chr, verbose = FALSE)
+  st <- ns$.cross_setup(p, f0, f0, p_min = min(p))
   fit_121 <- function(f) {                                                   # fold f ranked by the fit's curves
-    tr <- chr != f; te <- chr == f
-    withr::with_seed(2026, { fit <- ns$.fit_surface(p[tr], f0[tr], f0[tr], seed = 2026); cur <- ns$.bin_curves(fit, p_min = min(p))
-      pl <- ns$.place_on_fit(fit, cur, p_new = p[te], fpi0_new = f0[te], surrogate_new = f0[te]) })
+    tr <- chr != f; te <- chr == f; k <- ns$.cross_fold(p, f0, f0, tr, st, p_min = min(p)); cur <- k$cur; pl <- k$pl
     list(v = ns$.v_from_curves(cur, c = pl$lfdr, p = p[te], grp = pl$grp, credit = min(p[tr]) > min(p)), lfdr = pl$lfdr,
          edge = pnorm(cur$s_p[min(which(cur$s_p >= qnorm(min(p[tr]))))]), e = min(p[tr]))
   }
@@ -192,4 +242,22 @@ test_that("below a fold's smallest training p the ranking falls with p: a lone l
   expect_lt(sum(o1$v[match(hit, which(te))] <= 5e-8), 15)
   inr <- p[te] >= o1$e & o1$v <= 1e-3 & a$fpvalues[te] <= 1e-3
   expect_gt(sum(inr), 10); expect_lte(max(abs(a$fpvalues[te][inr] - o1$v[inr])), o1$edge * (1 + 1e-9))
+})
+
+test_that("the v sums in C++ are the R loops over the bins, to the bit", {
+  set.seed(3); G <- 60; B <- 30; s_p <- seq(qnorm(1e-10), qnorm(1 - 1e-4), length.out = G)
+  L <- apply(matrix(runif(G * B), G), 2, function(x) pmin(sort(x) * 1.3, 1)); Wn <- runif(B); Wn <- Wn / sum(Wn)
+  cg <- sort(unique(c(exp(seq(log(1e-6), 0, length.out = 500)), seq(.5, 1, length.out = 500))))
+  c <- c(runif(150), rep(1, 20), L[cbind(sample(G, 30, TRUE), sample(B, 30, TRUE))]); p <- runif(200, 0, .01)
+  grp <- sample(c(seq_len(B), 99L), 200, TRUE); own <- match(grp, seq_len(B)) - 1L; own[is.na(own)] <- -1L
+  for (cr in c(TRUE, FALSE)) {
+    V <- numeric(length(cg)); for (b in seq_len(B)) V <- V + Wn[b] * sffdr:::.t_of_c(L[, b], s_p, cg, cr)
+    expect_identical(sffdr:::.v_grid(L, s_p, cg, Wn, cr), V)
+    v <- numeric(length(c))
+    for (b in seq_len(B)) {
+      a <- sffdr:::.a_of_c(L[, b], s_p, c); tb <- pmin(sffdr:::.t_of_c(L[, b], s_p, c, cr), pmax(a, p))
+      tb[grp == b] <- pmax(a[grp == b], p[grp == b]); v <- v + Wn[b] * tb
+    }
+    expect_identical(sffdr:::.v_exact(L, s_p, c, p, own, Wn, cr), v)
+  }
 })

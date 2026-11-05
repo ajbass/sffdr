@@ -14,9 +14,11 @@ fpi0est(
   lambda = seq(0.05, 0.95, 0.05),
   constrained.p = TRUE,
   tol = 1e-09,
-  maxit = 200,
+  maxit = 60,
   ncores = 1L,
   verbose = TRUE,
+  folds = NULL,
+  nfolds = NULL,
   ...
 )
 }
@@ -49,7 +51,8 @@ then you don't have to use the indep_snps argument, as the weights will effectiv
 
 \item{tol}{Numeric; convergence tolerance. Default is 1e-9.}
 
-\item{maxit}{Integer; maximum iterations. Default is 200.}
+\item{maxit}{Integer; maximum iterations of each fit, which also caps
+fastglm's step halvings. Default is 60.}
 
 \item{ncores}{Integer; number of cores for parallel lambda fitting via
 \code{parallel::mclapply}. Fork-based parallelism (Unix/macOS only) -
@@ -57,13 +60,28 @@ on Windows this falls back to sequential execution. Default is 1L.}
 
 \item{verbose}{Logical; print progress messages. Default is TRUE.}
 
+\item{folds}{Optional vector of fold labels (e.g., chromosomes), one per
+p-value. If given, lambda is chosen once and each fold's pi0 comes from the
+model refitted on the other folds, so a SNP's pi0 does not use its own
+p-value or its LD neighbours'. The fold models are kept with the estimates,
+and \code{sffdr()} with the same \code{folds} and \code{nfolds} scores each
+fold with its own model. Recommended with \code{sffdr(folds = )} when no
+LD-independent set (\code{indep_snps}) is available. Default is NULL.}
+
+\item{nfolds}{Optional integer; with \code{folds}, the number of folds (the
+labels grouped as in \code{\link{sffdr}}). Default is NULL.}
+
 \item{...}{Additional arguments passed to \code{\link[fastglm]{fastglm}}.}
 }
 \value{
 An object of class \code{fpi0} (a list) containing:
 \describe{
   \item{fpi0}{Numeric vector of functional pi0 estimates for each test,
-    floored at 0.01. Tests with a missing p-value or covariate get 1.}
+    floored at 0.01. Tests with a missing p-value or covariate get 1. With
+    \code{folds}, each test's estimate is from the model fitted without its
+    fold, and the fold models are the attribute \code{"pi0_folds"}. With
+    one covariate in the model, the covariate is the attribute
+    \code{"surrogate"}, \code{sffdr()}'s default surrogate.}
   \item{tableLambda}{A data frame with one row per lambda value: the
     MISE, the mean fitted pi0 and whether it was chosen.}
   \item{MISE}{The Mean Integrated Squared Error (MISE) at each lambda.}

@@ -13,6 +13,7 @@ fit_strategy_final(
   maxit,
   maxk,
   verbose,
+  ev = rbox(),
   ...
 )
 }
@@ -32,6 +33,8 @@ fit_strategy_final(
 \item{maxk}{Space for locfit's evaluation structure.}
 
 \item{verbose}{Logical; print progress messages.}
+
+\item{ev}{locfit's evaluation structure (the tree on the data's box).}
 
 \item{...}{Additional arguments passed to locfit().}
 }

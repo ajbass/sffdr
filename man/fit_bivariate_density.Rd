@@ -13,6 +13,7 @@ fit_bivariate_density(
   maxk,
   weights = NULL,
   verbose = TRUE,
+  tail_box = NULL,
   ...
 )
 }
@@ -32,6 +33,11 @@ fit_bivariate_density(
 \item{weights}{Optional numeric vector of weights for density estimation.}
 
 \item{verbose}{Logical; whether to print progress messages during fitting.}
+
+\item{tail_box}{Optional probit p-value: fit only the surface below it
+(cross-fitting's per-fold refit, the bulk coming from one fit on every
+SNP), with the same rows and window; the fit's \code{"scale"} attribute
+is the share of the weight it keeps.}
 
 \item{...}{Additional arguments for locfit().}
 }

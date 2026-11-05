@@ -47,11 +47,21 @@
 #' @param lambda Numeric vector of lambda thresholds in (0, 1). Default is \code{seq(0.05, 0.95, 0.05)}.
 #' @param constrained.p Logical; use constrained binomial family. Default is TRUE.
 #' @param tol Numeric; convergence tolerance. Default is 1e-9.
-#' @param maxit Integer; maximum iterations. Default is 200.
+#' @param maxit Integer; maximum iterations of each fit, which also caps
+#'   fastglm's step halvings. Default is 60.
 #' @param ncores Integer; number of cores for parallel lambda fitting via
 #'   \code{parallel::mclapply}. Fork-based parallelism (Unix/macOS only) -
 #'   on Windows this falls back to sequential execution. Default is 1L.
 #' @param verbose Logical; print progress messages. Default is TRUE.
+#' @param folds Optional vector of fold labels (e.g., chromosomes), one per
+#'   p-value. If given, lambda is chosen once and each fold's pi0 comes from the
+#'   model refitted on the other folds, so a SNP's pi0 does not use its own
+#'   p-value or its LD neighbours'. The fold models are kept with the estimates,
+#'   and \code{sffdr()} with the same \code{folds} and \code{nfolds} scores each
+#'   fold with its own model. Recommended with \code{sffdr(folds = )} when no
+#'   LD-independent set (\code{indep_snps}) is available. Default is NULL.
+#' @param nfolds Optional integer; with \code{folds}, the number of folds (the
+#'   labels grouped as in \code{\link{sffdr}}). Default is NULL.
 #' @param ... Additional arguments passed to \code{\link[fastglm]{fastglm}}.
 #'
 #' @examples
@@ -75,7 +85,11 @@
 #' @return An object of class \code{fpi0} (a list) containing:
 #' \describe{
 #'   \item{fpi0}{Numeric vector of functional pi0 estimates for each test,
-#'     floored at 0.01. Tests with a missing p-value or covariate get 1.}
+#'     floored at 0.01. Tests with a missing p-value or covariate get 1. With
+#'     \code{folds}, each test's estimate is from the model fitted without its
+#'     fold, and the fold models are the attribute \code{"pi0_folds"}. With
+#'     one covariate in the model, the covariate is the attribute
+#'     \code{"surrogate"}, \code{sffdr()}'s default surrogate.}
 #'   \item{tableLambda}{A data frame with one row per lambda value: the
 #'     MISE, the mean fitted pi0 and whether it was chosen.}
 #'   \item{MISE}{The Mean Integrated Squared Error (MISE) at each lambda.}
@@ -101,9 +115,11 @@ fpi0est <- function(
   lambda = seq(0.05, 0.95, 0.05),
   constrained.p = TRUE,
   tol = 1e-9,
-  maxit = 200,
+  maxit = 60,
   ncores = 1L,
   verbose = TRUE,
+  folds = NULL,
+  nfolds = NULL,
   ...
 ) {
   if (
@@ -183,6 +199,11 @@ fpi0est <- function(
     stop("'lambda' must be numeric values in (0, 1).")
   }
   lambda <- sort(unique(lambda))
+  if (!is.null(folds)) {
+    if (length(folds) != length(p)) stop("'folds' must have one label per p-value.")
+    if (!is.null(nfolds)) folds <- .group_folds(folds, nfolds)
+    if (length(unique(folds[!is.na(folds)])) < 2L) stop("'folds' must have at least two distinct labels.")
+  }
   train <- .train_set(indep_snps, length(p), rownames(z))
 
   if (verbose) {
@@ -193,7 +214,7 @@ fpi0est <- function(
 
   # Handle missing values
   na_p <- is.na(p)
-  na_z <- apply(z, 1, anyNA)
+  na_z <- rowSums(is.na(z)) > 0
   valid_idx <- !na_z & !na_p
 
   p_valid <- p[valid_idx]
@@ -283,51 +304,6 @@ fpi0est <- function(
     return(rval)
   }
 
-  # Fit models across all lambda values (parallel if ncores > 1)
-  if (use_parallel) {
-    fits_raw <- parallel::mclapply(
-      lambda,
-      fit_pi0_at_lambda,
-      mc.cores = ncores
-    )
-    # Check for errors from mclapply
-    failed <- vapply(fits_raw, inherits, logical(1), "try-error")
-    if (any(failed)) {
-      warning(sprintf(
-        "%d lambda fits failed in parallel; falling back to sequential.",
-        sum(failed)
-      ))
-      for (i in which(failed)) {
-        fits_raw[[i]] <- tryCatch(
-          fit_pi0_at_lambda(lambda[i]),
-          error = function(e) NULL
-        )
-      }
-    }
-    fpi0_models <- data.frame(lambda = lambda)
-    fpi0_models$fpi0 <- fits_raw
-  } else {
-    fpi0_models <- data.frame(lambda = lambda)
-    fpi0_models$fpi0 <- .lapply_pb(lambda, fit_pi0_at_lambda, verbose = verbose)
-  }
-
-  # Extract fitted pi0 values for all lambda (one column per lambda)
-  fpi0_matrix <- vapply(
-    seq_along(lambda),
-    function(i) {
-      pmin(fitted.values(fpi0_models$fpi0[[i]]) / (1 - lambda[i]), 1)
-    },
-    numeric(length(p_fit))
-  )
-  fpi0_matrix <- matrix(fpi0_matrix, ncol = length(lambda))
-
-  ref_pi0 <- pmin(fitted.values(fpi0_models$fpi0[[1]]) / (1 - lambda[1]), 1)
-
-  # Select optimal lambda via closed-form MISE
-  if (verbose) {
-    message("  Selecting optimal lambda via MISE...")
-  }
-
   # Compute global pi0
   if (is.null(w_fit)) {
     pi0_global <- qvalue::pi0est(p_fit, pi0.method = "bootstrap")$pi0
@@ -339,31 +315,70 @@ fpi0est <- function(
     )$pi0
   }
 
-  # Precompute shared terms for closed-form k
-  one_minus_ref <- 1 - ref_pi0
-  denom <- mean(one_minus_ref^2)
+  # MISE and mean of one lambda's pi0, against the first lambda's (ref_pi0)
+  ref_pi0 <- one_minus_ref <- denom <- NULL
+  pi0_of <- function(fit, l) pmin(fitted.values(fit) / (1 - l), 1)
+  stat_of <- function(fpi0_i) {
+    # Closed-form solution for k minimising mean((ref - k*(1-ref) - f)^2)
+    k <- mean((ref_pi0 - fpi0_i) * one_minus_ref) / denom
+    # Ensure k stays strictly within the [-1, 1] bounds
+    k <- max(-1, min(1, k))
+    phi_hat <- pmin(ref_pi0 - k * one_minus_ref, 1)
+    omega <- mean((fpi0_i - phi_hat)^2)
+    delta_sq <- (max(mean(fpi0_i) - pi0_global, 0))^2
+    c(mise = omega + delta_sq, mean = colMeans(matrix(fpi0_i)))
+  }
+  set_ref <- function(f) { ref_pi0 <<- f; one_minus_ref <<- 1 - f; denom <<- mean(one_minus_ref^2) }
 
-  mise_stats <- vapply(
-    seq_along(lambda),
-    function(i) {
-      fpi0_i <- fpi0_matrix[, i]
-      # Closed-form solution for k minimising mean((ref - k*(1-ref) - f)^2)
-      k <- mean((ref_pi0 - fpi0_i) * one_minus_ref) / denom
-      # Ensure k stays strictly within the [-1, 1] bounds
-      k <- max(-1, min(1, k))
-      phi_hat <- pmin(ref_pi0 - k * one_minus_ref, 1)
-      omega <- mean((fpi0_i - phi_hat)^2)
-      delta_sq <- (max(mean(fpi0_i) - pi0_global, 0))^2
-      omega + delta_sq
-    },
-    numeric(1)
-  )
+  # Fit models across all lambda values (parallel if ncores > 1)
+  fit_hat <- NULL
+  if (use_parallel) {
+    fits <- parallel::mclapply(
+      lambda,
+      fit_pi0_at_lambda,
+      mc.cores = ncores
+    )
+    # Check for errors from mclapply
+    failed <- vapply(fits, inherits, logical(1), "try-error")
+    if (any(failed)) {
+      warning(sprintf(
+        "%d lambda fits failed in parallel; falling back to sequential.",
+        sum(failed)
+      ))
+      for (i in which(failed)) {
+        fits[[i]] <- tryCatch(
+          fit_pi0_at_lambda(lambda[i]),
+          error = function(e) NULL
+        )
+      }
+    }
+    set_ref(pi0_of(fits[[1]], lambda[1]))
+    st <- lapply(seq_along(lambda), function(i) stat_of(pi0_of(fits[[i]], lambda[i])))
+  } else {
+    # One lambda at a time: a fit is kept only while its MISE is the lowest
+    best <- Inf
+    st <- .lapply_pb(seq_along(lambda), function(i) {
+      fit <- fit_pi0_at_lambda(lambda[i]); f <- pi0_of(fit, lambda[i])
+      if (i == 1L) set_ref(f)
+      s <- stat_of(f)
+      if (isTRUE(s[["mise"]] < best)) { best <<- s[["mise"]]; fit_hat <<- fit }
+      s
+    }, verbose = verbose)
+  }
+  mise_stats <- vapply(st, function(s) s[["mise"]], numeric(1))
+  mean_fpi0 <- vapply(st, function(s) s[["mean"]], numeric(1))
+
+  # Select optimal lambda via closed-form MISE
+  if (verbose) {
+    message("  Selecting optimal lambda via MISE...")
+  }
 
   # Guard against all-NA MISE
   min_idx <- which.min(mise_stats)
   if (length(min_idx) == 0) {
     warning("All MISE values are NA; defaulting to largest lambda.")
     min_idx <- length(lambda)
+    fit_hat <- NULL
   }
   lambda_hat <- lambda[min_idx]
 
@@ -371,8 +386,9 @@ fpi0est <- function(
     message(sprintf("  Selected lambda: %.2f", lambda_hat))
   }
 
-  fpi0_models$chosen <- fpi0_models$lambda == lambda_hat
-  fit_hat <- fpi0_models$fpi0[[min_idx]]
+  if (use_parallel) { fit_hat <- fits[[min_idx]]; fits <- NULL }
+  if (is.null(fit_hat)) fit_hat <- fit_pi0_at_lambda(lambda_hat)
+  attr(fit_hat$terms, ".Environment") <- topenv()      # not this frame
   if (isFALSE(fit_hat$converged)) {
     warning(sprintf(
       "The pi0 model at lambda = %.2f did not converge in %d iterations; consider increasing 'maxit' or simplifying the model.",
@@ -425,9 +441,42 @@ fpi0est <- function(
   # Apply floor to fpi0 predictions
   fpi0_pred <- pmax(fpi0_pred, 0.01)
 
+  # Folds: refit at lambda_hat without each fold, keep the models for sffdr()
+  pi0_folds <- NULL
+  if (!is.null(folds)) {
+    fv <- folds[valid_idx]; ff <- fv[fit_idx]; ids <- sort(unique(fv[!is.na(fv)]))
+    y_hat <- as.numeric(p_fit >= lambda_hat)
+    fam <- if (constrained.p) constrained.binomial(1 - lambda_hat) else binomial()
+    if (verbose) message(sprintf("  Refitting in %d folds at lambda = %.2f...", length(ids), lambda_hat))
+    refit <- function(f) {
+      tr <- !is.na(ff) & ff != f
+      suppressWarnings(fastglm::fastglm(x = X[tr, , drop = FALSE], y = y_hat[tr], family = fam, weights = w_fit_glm[tr],
+                                        method = 3L, tol = tol, maxit = maxit))$coefficients
+    }
+    tt <- attr(mf, "terms"); attr(tt, ".Environment") <- topenv()          # not this frame (every lambda's fit)
+    pi0_folds <- list(labels = folds, ids = ids, coef = do.call(cbind, .lapply_pb(ids, refit, verbose = verbose)), coef_all = fit_hat$coefficients, lambda = lambda_hat,
+                      terms = tt, xlevels = .getXlevels(tt, mf), constrained = constrained.p, z = z)
+    for (f in ids) {
+      te <- which(!is.na(fv) & fv == f)
+      fpi0_pred[te] <- .fpi0_of_fold(pi0_folds, f, rows = which(valid_idx)[te])
+    }
+  }
+
   # Fill results: tests with a missing p-value or covariate get fpi0 = 1
   fpi0_out <- rep(1, length(p))
   fpi0_out[valid_idx] <- fpi0_pred
+  attr(fpi0_out, "pi0_folds") <- pi0_folds
+
+  # One covariate: the default surrogate, missing values at the null end
+  v <- intersect(all.vars(delete.response(attr(mf, "terms"))), colnames(z))
+  if (length(v) == 1L && is.numeric(s <- if (is.data.frame(z)) z[[v]] else z[, v])) {
+    if (anyNA(s)) {
+      r <- suppressWarnings(cor(s, fpi0_out, method = "spearman", use = "complete.obs"))
+      s <- if (isTRUE(r < 0)) -s else s
+      s[is.na(s)] <- Inf
+    }
+    attr(fpi0_out, "surrogate") <- as.numeric(s)
+  }
 
   if (verbose) {
     message("  Done.")
@@ -442,8 +491,8 @@ fpi0est <- function(
       tableLambda = data.frame(
         lambda = lambda,
         MISE = mise_stats,
-        mean_fpi0 = colMeans(fpi0_matrix),
-        chosen = fpi0_models$chosen
+        mean_fpi0 = mean_fpi0,
+        chosen = lambda == lambda_hat
       ),
       MISE = mise_stats,
       lambda = lambda_hat,
@@ -451,6 +500,18 @@ fpi0est <- function(
     ),
     class = "fpi0"
   )
+}
+
+## pi0 under fold k's model (k NULL: the global model), 1 for a missing covariate
+.fpi0_of_fold <- function(pf, k, rows = seq_len(nrow(pf$z)), chunk_size = 500000) {
+  tt <- delete.response(pf$terms); b <- if (is.null(k)) pf$coef_all else pf$coef[, match(k, pf$ids)]; b[is.na(b)] <- 0
+  out <- rep(1, length(rows)); zz <- pf$z[rows, , drop = FALSE]; ok <- which(stats::complete.cases(zz))
+  for (i in split(ok, ceiling(seq_along(ok) / chunk_size))) {
+    X <- model.matrix(tt, model.frame(tt, as.data.frame(zz[i, , drop = FALSE]), xlev = pf$xlevels))
+    mu <- plogis(drop(X[, names(b), drop = FALSE] %*% b))
+    out[i] <- pmax(pmin(if (pf$constrained) mu else mu / (1 - pf$lambda), 1), 0.01)
+  }
+  out
 }
 
 constrained.binomial <- function(maximum) {
@@ -663,25 +724,34 @@ get_predict <- function(object, newdata, na.action = na.pass, ...) {
     return(lapply(X, FUN, ...))
   }
 
-  pb <- txtProgressBar(min = 0, max = length(X), style = 3, width = pb_width)
-
-  # Safety: If code crashes, this runs to close the bar (printing \n) so the console doesn't break
-  on.exit(close(pb))
-
-  result <- vector("list", length(X))
-  for (i in seq_along(X)) {
-    result[[i]] <- FUN(X[[i]], ...)
-    setTxtProgressBar(pb, i)
+  # Progress bar with the time left
+  n <- length(X)
+  t0 <- proc.time()[["elapsed"]]
+  show <- function(i) {
+    k <- round(pb_width * i / n)
+    left <- if (i > 0 && i < n) sprintf(", about %s left  ", .time_left((proc.time()[["elapsed"]] - t0) / i * (n - i))) else strrep(" ", 24)
+    cat(sprintf("\r  |%s%s| %3d%%%s", strrep("=", k), strrep(" ", pb_width - k), round(100 * i / n), left))
   }
 
-  # Success!
-  on.exit() # 1. Cancel the safety hook
+  # Safety: If code crashes, this ends the line so the console doesn't break
+  on.exit(cat("\n"))
+  show(0)
 
-  # 2. DO NOT call close(pb). It forces a newline.
-  # 3. Manually overwrite the line with spaces
-  cat("\r", strrep(" ", pb_width + 10), "\r", sep = "")
+  result <- vector("list", n)
+  for (i in seq_len(n)) {
+    result[[i]] <- FUN(X[[i]], ...)
+    show(i)
+  }
+
+  # Success: cancel the safety hook and overwrite the line with spaces
+  on.exit()
+  cat("\r", strrep(" ", pb_width + 40), "\r", sep = "")
 
   result
+}
+
+.time_left <- function(s) {
+  if (s < 90) sprintf("%.0f s", s) else if (s < 5400) sprintf("%.0f min", s / 60) else sprintf("%.1f h", s / 3600)
 }
 
 pi0est_weighted <- function(

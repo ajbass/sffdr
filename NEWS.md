@@ -1,3 +1,42 @@
+# sffdr 1.2.4
+
+* `sffdr(folds = )` refits only the density's tail (p < 0.1) in each fold, on
+  the same rows and window. The bulk above it is one fit on every SNP. On one
+  core, leave-one-chromosome-out takes 51 s against 138 s at 1M SNPs and 7
+  against 12 minutes at 10M, and `nfolds = 5` 16 against 34 s and 2 against 4
+  minutes, with the same calls at 5e-8 and the same calibration from 1e-4 to
+  0.1 in null, sparse and polygenic simulations. A SNP's functional p-value
+  moves by less than a change of `seed` moves it.
+* `fpi0est(folds = , nfolds = )` estimates the functional pi0 by fold, for data
+  without an LD-independent training set: lambda is chosen once on all SNPs and
+  the model refitted at it on the other folds. The estimates carry the fold
+  models, and `sffdr()` with the same folds gives every SNP each fold's pi0
+  (and surrogate rank) when it scores that fold, so no SNP's pi0 or surrogate
+  uses its own p-value. In simulation, a 2,000-SNP null LD block at p ~ 6e-5
+  outside the enriched region put 1,442-1,799 of its SNPs at functional
+  p <= 1e-4 under one pi0 fit on all SNPs (1,371-1,393 by their p-values), and
+  3-241 under the fold models.
+* When the functional pi0 model has one covariate, that covariate is the
+  default surrogate (`fpi0est()` attaches it to its estimates): the pi0
+  compresses several covariates into one, and stays the surrogate for those.
+  This changes the results of analyses with one covariate (in simulation, the
+  same or more calls at 5e-8: 55 against 52 per genome with 50-SNP LD blocks).
+  `surrogate = fpi0` gives the earlier default.
+* `fpi0est()`'s default `maxit` is 60 (was 200). fastglm caps its step
+  halvings at `maxit`, and at the pi0 = 1 boundary it halved each lambda fit's
+  last step 200 times. The fits converge in 4-18 iterations, and the estimates
+  are identical to the bit in eight simulated genomes (no signal, and 0.2% or
+  1.5% of LD blocks associated), at 2.4-3 times the speed (1M SNPs: 90 s
+  against 225 s).
+* `fpi0est()` holds one lambda fit at a time (the best so far) in place of all
+  19, and the returned model no longer keeps the function's frame, which held
+  every fit. On 1M SNPs the peak memory is 0.9 against 2.2 GB and the returned
+  object 69 against 1,564 MB, in the same time and with the same estimates.
+* Progress bars (`verbose = TRUE`) show the time left, for the lambda fits and
+  the folds.
+* The functional p-value's sums over the surrogate bins run in C++ (the same
+  values, to the bit).
+
 # sffdr 1.2.3
 
 * `sffdr(folds = , nn = "cv")` chooses the density's bandwidth by

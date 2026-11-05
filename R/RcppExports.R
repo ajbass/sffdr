@@ -2,10 +2,10 @@
 # Generator token: 10BE3573-1514-4C36-9D1C-5A225CD40393
 
 #' Fast Conditional Monotonic Smoothing
-#' 
+#'
 #' Enforces strictly non-increasing density conditional on surrogate bins.
 #' Note: Data must be sorted by (group, pvalue) before passing.
-#' 
+#'
 #' @param pvalue Numeric vector of p-values.
 #' @param density Numeric vector of estimated densities.
 #' @param group Integer vector of surrogate bins.
@@ -16,14 +16,26 @@ monoSmooth_conditional <- function(pvalue, density, group) {
 }
 
 #' Fast Conditional PAVA (Decreasing)
-#'  
+#'
 #' @param pvalue A numeric vector of p-values. Must be sorted ascendingly within each group.
 #' @param density A numeric vector of initial density estimates (e.g., from locfit).
 #' @param group An integer vector denoting the surrogate bin/stratum for each observation.
-#' 
+#'
 #' @return A numeric vector of smoothed, monotonically non-increasing densities.
 #' @export
 monoSmooth_pava <- function(pvalue, density, group) {
     .Call(`_sffdr_monoSmooth_pava`, pvalue, density, group)
+}
+
+.v_grid <- function(L, s, cg, W, credit) {
+    .Call(`_sffdr_v_grid`, L, s, cg, W, credit)
+}
+
+.v_exact <- function(L, s, c, p, own, W, credit) {
+    .Call(`_sffdr_v_exact`, L, s, c, p, own, W, credit)
+}
+
+.v_own <- function(L, s, cg, i, w, c, p, own, W, a1, top, credit, v) {
+    .Call(`_sffdr_v_own`, L, s, cg, i, w, c, p, own, W, a1, top, credit, v)
 }
 

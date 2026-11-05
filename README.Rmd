@@ -120,7 +120,7 @@ fpi0 <- fpi0est(p, mpi0, indep_snps = indep_snps)
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
 ```
 
-When the number of effective tests is much smaller than the number of SNPs (e.g., imputed data), we recommend cross-fitting the density by chromosome. To do this, provide the chromosome labels in `folds`: the density is then estimated leave-one-chromosome-out and each SNP is evaluated using the fit that excludes its chromosome, which provides calibrated functional p-values (the v-value construction of Liley and Wallace, 2021). The `nfolds` argument groups the chromosomes into fewer folds (e.g., `nfolds = 5`) to reduce computation time, and `ncores` runs the folds in parallel.
+When the number of effective tests is much smaller than the number of SNPs (e.g., imputed data), we recommend cross-fitting the density by chromosome. To do this, provide the chromosome labels in `folds`: the density is then estimated leave-one-chromosome-out and each SNP is evaluated using the fit that excludes its chromosome, which provides calibrated functional p-values (cross-fitting as in Liley and Wallace, 2021). The `nfolds` argument groups the chromosomes into fewer folds (e.g., `nfolds = 5`) to reduce computation time, and `ncores` runs the folds in parallel.
 
 ```{r, eval = FALSE}
 # Cross-fit the density by chromosome

@@ -22,7 +22,10 @@
 #' }
 #'
 #' Surrogate Variable:
-#' If not specified, the estimated functional pi0 is used as the surrogate variable.
+#' If not specified, the surrogate is the covariate of the functional pi0 model
+#' when it has one (\code{\link{fpi0est}} attaches it to its estimates), and the
+#' estimated functional pi0 otherwise: the pi0 compresses several covariates
+#' into one.
 #'
 #' Weights and LD:
 #' The joint density is estimated over all tested SNPs, which is the set the
@@ -60,19 +63,30 @@
 #' Cross-fitting: when the number of effective tests is much smaller than the
 #' number of SNPs (e.g., imputed data), set \code{folds} to the chromosome
 #' labels to obtain calibrated functional p-values from leave-one-chromosome-out
-#' fits (the v-value construction of Liley and Wallace, 2021); \code{nfolds}
-#' groups the chromosomes into fewer folds. A SNP beyond the smallest p-value
-#' of the other folds, where the fit has no data, is ranked by its own p-value:
+#' fits (cross-fitting as in Liley and Wallace, 2021); \code{nfolds}
+#' groups the chromosomes into fewer folds. Each fold refits the density's
+#' tail (p < 0.1), where a fold's own SNPs move the fit; the bulk above it is
+#' one fit on every SNP. Without an LD-pruned set for the pi0 model, estimate
+#' pi0 in the same folds (\code{fpi0est(folds = )}): each fold is then scored
+#' with the pi0 model fitted without it, which gives every SNP its pi0 and,
+#' unless \code{surrogate} is given, its surrogate rank (the tail is refitted
+#' on those ranks, the bulk is one fit on the global model's). A SNP beyond
+#' the smallest p-value of the other folds, where the fit has no data, is
+#' ranked by its own p-value:
 #' its bin's local FDR at that edge, falling in proportion to p.
 #'
 #' @param p.value Numeric vector of p-values to analyze, in [0, 1]. Exact
 #'   zeros are clamped to the smallest positive double with a warning;
 #'   negative values are an error.
 #' @param fpi0 Numeric vector of functional pi0 estimates, obtained
-#'   from \code{\link{fpi0est}}. Values must be in [0, 1].
+#'   from \code{\link{fpi0est}}. Values must be in [0, 1]. From
+#'   \code{fpi0est(folds = )} it carries the fold models, which the
+#'   cross-fitting uses (give the same \code{folds} and \code{nfolds}).
 #' @param surrogate Optional numeric vector (same length as \code{p.value}) used
-#'   as a surrogate variable for compression. If NULL (default), uses
-#'   \code{fpi0} as the surrogate.
+#'   as a surrogate variable for compression. If NULL (default), the pi0
+#'   model's covariate when it has one, else \code{fpi0} (with pi0 estimated
+#'   in folds, each fold's model's pi0). With \code{folds}, a surrogate given
+#'   here is used in every fold, so it must not be fitted on the p-values.
 #' @param weights Ignored, with a warning (kept for compatibility with sffdr
 #'   1.1.2); see Details.
 #' @param epsilon Numeric; lower bound for p-value clamping during density estimation.
@@ -94,8 +108,8 @@
 #'   surrogate bins are kept in the result (element \code{fit}). Default is
 #'   FALSE; it does not change any other element of the result.
 #' @param folds Optional vector of fold labels (e.g., chromosomes), one per SNP.
-#'   If given, the density is fitted leave-one-fold-out and each SNP is scored
-#'   on the fit that did not see its fold; \code{fpvalues} are then calibrated
+#'   If given, the density's tail (p < 0.1) is refitted leave-one-fold-out and
+#'   each SNP is scored on the fit that did not see its fold; \code{fpvalues} are then calibrated
 #'   when the number of effective tests is much smaller than the number of
 #'   SNPs. Default is NULL (no cross-fitting; output identical to earlier
 #'   versions).
@@ -231,6 +245,12 @@ sffdr <- function(
     stop("'fpi0' values must be in [0, 1].")
   }
 
+  # From fpi0est(): the fold models, and the surrogate for one covariate
+  pi0_folds <- attr(fpi0, "pi0_folds")
+  if (is.null(surrogate)) surrogate <- attr(fpi0, "surrogate")
+  attr(fpi0, "pi0_folds") <- NULL
+  attr(fpi0, "surrogate") <- NULL
+
   if (identical(nn, "cv") && is.null(folds)) {
     stop("nn = \"cv\" needs 'folds'.")
   }
@@ -269,10 +289,16 @@ sffdr <- function(
   if (!is.null(folds)) {
     if (length(folds) != n) stop("'folds' must have one label per SNP.")
     if (!is.null(nfolds)) folds <- .group_folds(folds, nfolds)
+    if (!is.null(pi0_folds) && !identical(as.vector(pi0_folds$labels), as.vector(folds))) {
+      stop("'fpi0' was estimated in other folds: give sffdr() the 'folds' and 'nfolds' given to fpi0est().")
+    }
     if (verbose) message("  Cross-fitting by fold...")
-    sv <- rep(NA_real_, n); sv[valid] <- surrogate_var
-    nn_cv <- if (identical(nn, "cv")) .cv_nn(p.value, fpi0, sv, folds, ncores = ncores, seed = seed, epsilon = epsilon, verbose = verbose, ...)
-    cv <- .sffdr_cross(p.value, fpi0, sv, folds, ncores = ncores, verbose = verbose, seed = seed, nn = if (is.null(nn_cv)) nn else nn_cv, epsilon = epsilon, ...)
+    sv <- NULL
+    if (is.null(pi0_folds) || !is.null(surrogate)) { sv <- rep(NA_real_, n); sv[valid] <- surrogate_var }   # else each fold's pi0
+    nn_cv <- if (identical(nn, "cv")) .cv_nn(p.value, fpi0, sv, folds, ncores = ncores, seed = seed, epsilon = epsilon, verbose = verbose,
+                                             pi0_folds = pi0_folds, ...)
+    cv <- .sffdr_cross(p.value, fpi0, sv, folds, ncores = ncores, verbose = verbose, seed = seed, nn = if (is.null(nn_cv)) nn else nn_cv, epsilon = epsilon,
+                       pi0_folds = pi0_folds, ...)
     cv <- .merge_folds(list(cv), p.value, fp_ties = fp_ties)
     if (verbose) { message("  Done."); message("==================================================") }
     return(structure(list(call = match.call(), pvalues = p.value, fpvalues = cv$fpvalues, fqvalues = cv$fqvalues,
