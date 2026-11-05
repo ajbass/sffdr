@@ -34,7 +34,7 @@
   object 69 against 1,564 MB, in the same time and with the same estimates.
 * The vignette and README recommend cross-fitting the density by chromosome
   (`folds = chr, nfolds = 5`) for GWAS, with pi0 in the same folds when there
-  is no pruned set.
+  is no pruned set. This supersedes `sffdr()` without `folds`.
 * Progress bars (`verbose = TRUE`) show the time left, for the lambda fits and
   the folds.
 * The functional p-value's sums over the surrogate bins run in C++ (the same

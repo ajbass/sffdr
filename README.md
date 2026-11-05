@@ -113,6 +113,8 @@ results <- data.frame(
 plot(sffdr_out)
 ```
 
+   **Note on `folds`**: `sffdr()` without `folds` (as above) is superseded by cross-fitting by chromosome (section 3), which has better tail behavior under LD.
+
 ### 3. Incorporating linkage disequilibrium (LD)
 
 In standard GWAS, SNPs are often correlated due to LD. To account for
@@ -160,7 +162,7 @@ If LD scores ($l_{j}$) are available (e.g., from LDSC regression), there are two
 zt <- cbind(mpi0$zt, ld = log(ld_score))
 fmod <- update(mpi0$fmod, ~ . + ns(ld, df = 3))
 fpi0 <- fpi0est(p, z = zt, pi0_model = fmod, indep_snps = indep_snps)
-sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
+sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, folds = chr, nfolds = 5)
 ```
 
 2. **As inverse weights in the $\pi_{0}$ fit** ($w_j = 1/l_{j}$), in place of LD pruning:
@@ -169,7 +171,7 @@ sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
 w <- 1 / ld_score
 mpi0 <- pi0_model(z, weights = w)
 fpi0 <- fpi0est(p, mpi0, weights = w)
-sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
+sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, folds = chr, nfolds = 5)
 ```
 
 `sffdr()` itself does not use weights: its density is estimated over all tested SNPs, which is the set the functional p-values count errors in, and reweighting that density biases the local FDR (SNPs in LD are each tested, so each counts).
@@ -187,7 +189,7 @@ When the informative variable is a per-SNP prediction of the expected $\chi^{2}$
 ``` r
 mpi0 <- pi0_model_echisq(echisq, indep_snps = indep_snps)
 fpi0 <- fpi0est(p, mpi0, indep_snps = indep_snps)
-sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, surrogate = echisq)
+sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, surrogate = echisq, folds = chr, nfolds = 5)
 ```
 
 Annotations can be included alongside the expected $\chi^{2}$ (e.g., the LD score, MAF, or annotation LD scores): pass them as further columns and each gets its own spline in its rank with the upper-tail knots, anchored only when the null value lies in its range. With more than one column the surrogate is the estimated functional $\pi_{0}$ (the default of `sffdr()`).
@@ -195,7 +197,7 @@ Annotations can be included alongside the expected $\chi^{2}$ (e.g., the LD scor
 ``` r
 mpi0 <- pi0_model_echisq(cbind(echisq = echisq, ld = ld_score), indep_snps = indep_snps)
 fpi0 <- fpi0est(p, mpi0, indep_snps = indep_snps)
-sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)
+sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, folds = chr, nfolds = 5)
 ```
 
 ### Manual Knot Selection and using other informative variables
