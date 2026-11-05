@@ -43,7 +43,10 @@ Default is \code{.Machine$double.xmin}.}
 
 \item{nn}{Numeric; nearest-neighbor bandwidth for \code{\link{kernelEstimator}},
 a fraction of the rows the density is fitted on. If NULL (default), the
-window spans ~5000 of those rows.}
+window spans ~5000 of those rows. With \code{folds}, \code{"cv"} chooses
+among 1/4, 1/2, 1, 2 and 4 times that window by the held-out
+log-likelihood of the tail (p < 0.023) on the left-out folds, kept as the
+attribute \code{"nn"} of the result.}
 
 \item{monotone}{Logical; if TRUE, enforces monotonicity of the estimated density with respect to p-values within bins of the surrogate variable. Default is TRUE.}
 

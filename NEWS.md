@@ -1,3 +1,10 @@
+# sffdr 1.2.3
+
+* `sffdr(folds = , nn = "cv")` chooses the density's bandwidth by
+  cross-validation: among 1/4 to 4 times the default window, the one with the
+  highest held-out log-likelihood of the tail SNPs (p < 0.023) on the left-out
+  folds. The default (`nn = NULL`) is unchanged.
+
 # sffdr 1.2.2
 
 * `sffdr(folds = )` ranks a SNP beyond the other folds' smallest p-value by its

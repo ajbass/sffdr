@@ -44,6 +44,36 @@
   out
 }
 
+## nn = "cv": the window among multiples of the default (~5000 fitted rows)
+## with the highest held-out log-likelihood of the tail (p < 0.023, the rows
+## the kernel fits without downsampling) given the surrogate bin
+.cv_nn <- function(p, fpi0, surrogate, folds, ncores = 1L, seed = 2026, epsilon = .Machine$double.xmin, mult = c(.25, .5, 1, 2, 4),
+                   grid_size = 600L, verbose = TRUE, ...) {
+  ok <- !is.na(p) & !is.na(fpi0) & !is.na(surrogate) & !is.na(folds)
+  p_min <- min(p[ok]); fold_ids <- sort(unique(folds[ok])); pt <- pnorm(-2)
+  n_tail <- sum(p[ok] < pt); nn0 <- max(0.005, min(0.05, 5000 / (n_tail + min(sum(ok) - n_tail, 1e5))))
+  one_fold <- function(f, nn) {
+    if (!is.null(seed)) withr::local_seed(seed)
+    te <- ok & folds == f; tr <- ok & folds != f
+    fit <- .fit_surface(p[tr], fpi0[tr], surrogate[tr], seed = seed, nn = nn, epsilon = epsilon, ...)
+    cur <- .bin_curves(fit, p_min = p_min, grid_size = grid_size)
+    pl <- .place_on_fit(fit, cur, p_new = p[te], fpi0_new = fpi0[te], surrogate_new = surrogate[te])
+    s <- pnorm(cur$s_p); tl <- p[te] < pt
+    mass <- apply(cur$fx, 2, function(fx) approx(s, cumsum(c(fx[1] * s[1], diff(s) * (fx[-1] + fx[-length(fx)]) / 2)), xout = pt, rule = 2)$y)
+    sum(log(pl$fx[tl] / mass[match(pl$grp[tl], cur$ids)]))
+  }
+  cand <- nn0 * mult
+  if (verbose) message(sprintf("  Choosing nn: %d windows x %d folds", length(cand), length(fold_ids)))
+  ll <- vapply(cand, function(nn) {
+    r <- if (ncores > 1L && .Platform$OS.type != "windows") parallel::mclapply(fold_ids, function(f) try(one_fold(f, nn), silent = TRUE), mc.cores = as.integer(ncores))
+         else lapply(fold_ids, function(f) try(one_fold(f, nn), silent = TRUE))
+    if (any(vapply(r, inherits, logical(1), "try-error"))) -Inf else sum(unlist(r))
+  }, numeric(1))
+  if (!any(is.finite(ll))) stop("nn = \"cv\": the density fit failed at every window.")
+  if (verbose) message(sprintf("  nn = %.4g (held-out tail log-likelihood %s)", cand[which.max(ll)], paste(sprintf("%.1f", ll), collapse = ", ")))
+  cand[which.max(ll)]
+}
+
 ## Group fold labels into nfolds folds of similar size, whole labels kept
 ## together (largest label first, each to the smallest fold so far).
 .group_folds <- function(folds, nfolds) {

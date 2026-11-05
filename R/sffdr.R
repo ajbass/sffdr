@@ -79,7 +79,10 @@
 #'   Default is \code{.Machine$double.xmin}.
 #' @param nn Numeric; nearest-neighbor bandwidth for \code{\link{kernelEstimator}},
 #'   a fraction of the rows the density is fitted on. If NULL (default), the
-#'   window spans ~5000 of those rows.
+#'   window spans ~5000 of those rows. With \code{folds}, \code{"cv"} chooses
+#'   among 1/4, 1/2, 1, 2 and 4 times that window by the held-out
+#'   log-likelihood of the tail (p < 0.023) on the left-out folds, kept as the
+#'   attribute \code{"nn"} of the result.
 #' @param monotone Logical; if TRUE, enforces monotonicity of the estimated density with respect to p-values within bins of the surrogate variable. Default is TRUE.
 #' @param monotone_method Character; method for enforcing monotonicity. Options are "min" (running minimum) or "pava" (Pool Adjacent Violators Algorithm). Default is "min".
 #'   We do not recommend "pava" for GWAS data sets due to LD, but it may be better for expression data.
@@ -228,6 +231,10 @@ sffdr <- function(
     stop("'fpi0' values must be in [0, 1].")
   }
 
+  if (identical(nn, "cv") && is.null(folds)) {
+    stop("nn = \"cv\" needs 'folds'.")
+  }
+
   # Handle NAs: identify valid indices, compute on valid subset, map back
   valid <- !is.na(p.value) & !is.na(fpi0)
   if (!is.null(surrogate)) {
@@ -264,11 +271,12 @@ sffdr <- function(
     if (!is.null(nfolds)) folds <- .group_folds(folds, nfolds)
     if (verbose) message("  Cross-fitting by fold...")
     sv <- rep(NA_real_, n); sv[valid] <- surrogate_var
-    cv <- .sffdr_cross(p.value, fpi0, sv, folds, ncores = ncores, verbose = verbose, seed = seed, nn = nn, epsilon = epsilon, ...)
+    nn_cv <- if (identical(nn, "cv")) .cv_nn(p.value, fpi0, sv, folds, ncores = ncores, seed = seed, epsilon = epsilon, verbose = verbose, ...)
+    cv <- .sffdr_cross(p.value, fpi0, sv, folds, ncores = ncores, verbose = verbose, seed = seed, nn = if (is.null(nn_cv)) nn else nn_cv, epsilon = epsilon, ...)
     cv <- .merge_folds(list(cv), p.value, fp_ties = fp_ties)
     if (verbose) { message("  Done."); message("==================================================") }
     return(structure(list(call = match.call(), pvalues = p.value, fpvalues = cv$fpvalues, fqvalues = cv$fqvalues,
-                          flfdr = cv$flfdr, fpi0 = fpi0, fx = cv$fx, folds = folds), class = "sffdr"))
+                          flfdr = cv$flfdr, fpi0 = fpi0, fx = cv$fx, folds = folds), class = "sffdr", nn = nn_cv))
   }
 
   # Rank-transform surrogate to percentile scale
