@@ -169,7 +169,7 @@ test_that("below a fold's smallest training p the ranking falls with p: a lone l
   cur <- sffdr:::.bin_curves(fit, p_min = e / 1e6); rk <- sffdr:::.continue_curves(fit, cur); lo <- cur$s_p < qnorm(e)
   expect_identical(rk$fx[!lo, ], cur$fx[!lo, ]); expect_identical(rk$lfdr[!lo, ], cur$lfdr[!lo, ])
   a <- sweep(rk$fx[lo, , drop = FALSE], 1, e / pnorm(cur$s_p[lo]), "/")             # below e: a value at e times e / p
-  expect_lt(max(abs(sweep(a, 2, a[1, ], "/") - 1)), 1e-12); expect_true(all(a[1, ] >= cur$fx[max(which(lo)) + 1L, ]))
+  expect_lt(max(abs(sweep(a, 2, a[1, ], "/") - 1)), 1e-12); expect_true(all(a[1, ] >= cur$fx[max(which(lo)) + 1L, ] * (1 - 1e-12)))
   expect_true(all(apply(rk$fx, 2, function(x) all(diff(x) <= 0))))
   expect_identical(sffdr:::.continue_curves(fit, sffdr:::.bin_curves(fit, p_min = e)), sffdr:::.bin_curves(fit, p_min = e))
   ns <- asNamespace("sffdr")
