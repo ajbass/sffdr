@@ -113,8 +113,6 @@ results <- data.frame(
 plot(sffdr_out)
 ```
 
-   **Note on `folds`**: `sffdr()` without `folds` (as above) is superseded by cross-fitting by chromosome (section 3), which has better tail behavior under LD.
-
 ### 3. Incorporating linkage disequilibrium (LD)
 
 In standard GWAS, SNPs are often correlated due to LD. To account for
@@ -139,6 +137,8 @@ sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, folds = chr, nfolds = 5)
 fpi0 <- fpi0est(p, pi0_model(z = z), folds = chr, nfolds = 5)
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, folds = chr, nfolds = 5)
 ```
+
+   **Note on `folds`**: `sffdr()` without `folds` (as in the quick start) is superseded by cross-fitting by chromosome, which has better tail behavior under LD.
 
    **Note on computational time**: Cross-fitting refits the density's tail (p < 0.1) once per fold and takes the rest from one fit on all SNPs, so leave-one-chromosome-out requires 22 tail fits: on a single core, about 1 minute for 1 million SNPs and 7 minutes for 10 million (compared to 6 seconds and 1 minute for a single fit). Increasing `ncores` divides this time across cores, and `nfolds` reduces the number of fits (e.g., `nfolds = 5` requires five tail fits). We recommend `nfolds = 5`: in our simulations five folds (groups of chromosomes) provided the same power as leave-one-chromosome-out at genome-wide significance in a third of the time. For low-powered studies, leave-one-chromosome-out (the default) keeps more power in the functional q-values, as each fit uses the largest possible training set (the remaining 21 chromosomes). A chromosome should never be split across folds. With `nn = "cv"`, each fold is fitted once per candidate window (five windows) before the final fit.
 
