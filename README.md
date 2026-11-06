@@ -121,7 +121,7 @@ LD-independent (e.g., via pruning). `sffdr` uses these independent SNPs
 to fit the model, then computes the significance quantities for the
 entire dataset.
 
-For GWAS, we recommend cross-fitting the density by chromosome. To do this, provide the chromosome labels in `folds`: the density is then estimated leave-one-chromosome-out and each SNP is evaluated using the fit that excludes its chromosome, which provides calibrated functional p-values under LD (cross-fitting as in Liley and Wallace, 2021). A SNP more significant than every SNP on the other chromosomes, where the fit has no data, is ranked by its own p-value. The `nfolds` argument groups the chromosomes into fewer folds (e.g., `nfolds = 5`) to reduce computation time, and `ncores` runs the folds in parallel. Setting `nn = "cv"` chooses the bandwidth of the density by cross-validation on the left-out folds.
+For GWAS, we recommend cross-fitting the density by chromosome. To do this, provide the chromosome labels in `folds`: the density is then estimated leave-one-chromosome-out (LOCO) and each SNP is evaluated using the fit that excludes its chromosome, which provides calibrated functional p-values under LD (cross-fitting as in Liley and Wallace, 2021). A SNP more significant than every SNP on the other chromosomes, where the fit has no data, is ranked by its own p-value. The `nfolds` argument groups the chromosomes into fewer folds (e.g., `nfolds = 5`) to reduce computation time, and `ncores` runs the folds in parallel. Setting `nn = "cv"` chooses the bandwidth of the density by cross-validation on the left-out folds.
 
 ``` r
 # Fit model using LD-independent subset (indep_snps: TRUE if SNP is LD-independent)
@@ -129,7 +129,7 @@ mpi0 <- pi0_model(z = z, indep_snps = indep_snps)
 fpi0 <- fpi0est(p, mpi0, indep_snps = indep_snps)
 
 # Recommended: cross-fit the density by chromosome
-# (low-powered study: consider leave-one-chromosome-out by leaving nfolds out,
+# (low-powered study: consider LOCO by leaving nfolds out,
 # or nfolds = 22, i.e., the number of chromosomes in the analysis)
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, folds = chr, nfolds = 5)
 
@@ -140,7 +140,7 @@ sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, folds = chr, nfolds = 5)
 
    **Note on `folds`**: `sffdr()` without `folds` (as in the quick start) is superseded by cross-fitting by chromosome, which has better tail behavior under LD.
 
-   **Note on computational time**: Cross-fitting refits the density's tail (p < 0.1) once per fold and takes the rest from one fit on all SNPs, so leave-one-chromosome-out requires 22 tail fits: on a single core, about 1 minute for 1 million SNPs and 7 minutes for 10 million (compared to 6 seconds and 1 minute for a single fit). Increasing `ncores` divides this time across cores, and `nfolds` reduces the number of fits (e.g., `nfolds = 5` requires five tail fits). We recommend `nfolds = 5`: in our simulations five folds (groups of chromosomes) provided the same power as leave-one-chromosome-out at genome-wide significance in a third of the time. For low-powered studies, leave-one-chromosome-out (the default) keeps more power in the functional q-values, as each fit uses the largest possible training set (the remaining 21 chromosomes). A chromosome should never be split across folds. With `nn = "cv"`, each fold is fitted once per candidate window (five windows) before the final fit.
+   **Note on computational time**: Cross-fitting refits the density's tail (p < 0.1) once per fold and takes the rest from one fit on all SNPs, so LOCO requires 22 tail fits: on a single core, about 1 minute for 1 million SNPs and 7 minutes for 10 million (compared to 6 seconds and 1 minute for a single fit). Increasing `ncores` divides this time across cores, and `nfolds` reduces the number of fits (e.g., `nfolds = 5` requires five tail fits). We recommend `nfolds = 5`: in our simulations five folds (groups of chromosomes) provided the same power as LOCO at genome-wide significance in a third of the time. For low-powered studies, LOCO (the default) keeps more power in the functional q-values, as each fit uses the largest possible training set (the remaining 21 chromosomes). A chromosome should never be split across folds. With `nn = "cv"`, each fold is fitted once per candidate window (five windows) before the final fit.
 
 **Note on choosing independent SNPs**: There are two strategies: (1)
 prune using plink (e.g., `--indep-pairwise 200kb 1 0.3`) and use the
