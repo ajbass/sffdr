@@ -244,16 +244,19 @@ test_that("below a fold's smallest training p the ranking falls with p: a lone l
   expect_gt(sum(inr), 10); expect_lte(max(abs(a$fpvalues[te][inr] - o1$v[inr])), o1$edge * (1 + 1e-9))
 })
 
-test_that("at the double floor of p the continued ranking stays finite: SNPs near p = 1e-308 get an lfdr and a value", {
+test_that("at the double floor of p the read off the continued ranking is a number, and only the NaN reads move", {
   set.seed(1); n <- 60000
   p <- 2 * pnorm(-abs(c(rnorm(n), rnorm(600, 5, 1.5)))); p[1:3] <- c(1e-40, 1e-30, 1e-20); f0 <- rep(.97, length(p))
   fit <- sffdr:::.fit_surface(p, f0, runif(length(p)), seed = 1)
   cur <- sffdr:::.bin_curves(fit, p_min = .Machine$double.xmin); rk <- sffdr:::.continue_curves(fit, cur)
-  expect_true(all(is.finite(rk$fx))); expect_true(all(apply(rk$fx, 2, function(x) all(diff(x) <= 0))))
-  expect_equal(max(rk$fx), .Machine$double.xmax)                              # the ratio reached the cap: the case tested
+  expect_true(any(is.infinite(rk$fx)))                                          # the continuation passed the largest double
   pt <- c(.Machine$double.xmin, 10 * .Machine$double.xmin, 1e-300, 1e-50, 1e-6, .5); f1 <- rep(.97, length(pt))
   pl <- sffdr:::.place_on_fit(fit, cur, pt, f1, rep(.5, length(pt)))
+  sp <- qnorm(pmax(pt, .Machine$double.xmin)); b <- match(pl$grp, rk$ids)            # the plain read, as before 1.2.5
+  q0 <- pmin(f1 / pmax(sapply(seq_along(pt), function(i) approx(rk$s_p, rk$fx[, b[i]], xout = sp[i], rule = 2)$y), .Machine$double.xmin), 1)
+  expect_true(any(is.nan(q0)))
   q <- sffdr:::.on_curves(rk, pl$grp, pt, f1); v <- sffdr:::.v_from_curves(rk, q, pt, pl$grp)
+  expect_identical(q[!is.nan(q0)], q0[!is.nan(q0)])
   expect_false(anyNA(q)); expect_false(anyNA(v)); expect_true(all(diff(q) >= 0)); expect_true(all(diff(v) >= 0))
 })
 

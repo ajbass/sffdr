@@ -2,10 +2,10 @@
 
 * `sffdr(folds = )` continues each fold's ranking below its smallest training
   p (e) as the density ratio at e times e / p. Where the grid of p reaches the
-  smallest double (p near 1e-308, |z| above 37.5) the ratio could pass the
-  largest double, and the local FDR read off the curve between the floor and
-  the next grid point was NaN. The ratio is now held at the largest double.
-  Results without such p-values are identical.
+  smallest double (p near 1e-308, |z| above 37.5) the ratio can pass the
+  largest double, and the local FDR read off the curve between such a grid
+  point and a finite one was NaN. Those SNPs are now read with the curve held
+  at the largest double. Every value that was a number is unchanged.
 
 # sffdr 1.2.4
 

@@ -194,27 +194,31 @@ vvalues <- function(object, grid_size = 600L) {
 
 ## The ranking: below the fold's smallest training p (e) each bin's density
 ## ratio is the fit's at e (before the running minimum) times e / p, above e
-## the fit's curve. The ratio is held at the largest double, which e / p can
-## pass where the grid reaches the smallest double (p near 1e-308)
+## the fit's curve
 .continue_curves <- function(fit, cur) {
   e <- min(fit$p); lo <- cur$s_p < qnorm(e); j <- sum(lo) + 1L
   if (j == 1L || j > length(lo)) return(cur)
   zb <- qnorm(as.numeric(if (is.null(fit$bins)) tapply(fit$z, fit$groups, mean) else fit$bins$zb))
   fe <- (if (is.null(fit$scale)) 1 else fit$scale) * predict(fit$lfit, newdata = data.frame(V1 = zb, V2 = cur$s_p[j]), log = FALSE)
   fe <- fe / pmax(dnorm(zb) * dnorm(cur$s_p[j]), .Machine$double.xmin)
-  cur$fx[lo, ] <- pmin(outer(e / pnorm(cur$s_p[lo]), pmax(fe, cur$fx[j, ])), .Machine$double.xmax)
+  cur$fx[lo, ] <- outer(e / pnorm(cur$s_p[lo]), pmax(fe, cur$fx[j, ]))
   pi0b <- if (is.null(fit$bins)) tapply(fit$fpi0, fit$groups, mean) else fit$bins$pi0b
   cur$lfdr[lo, ] <- sweep(cur$fx[lo, , drop = FALSE], 2, as.numeric(pi0b), FUN = function(f, p0) pmin(p0 / f, 1))
   cur
 }
 
-## lfdr of SNPs placed in bins grp, read off cur
+## lfdr of SNPs placed in bins grp, read off cur. Where the grid reaches the
+## smallest double (p near 1e-308) the continued curve can pass the largest
+## double, and the read between that grid point and a finite one is NaN: those
+## SNPs are read with the curve held at the largest double
 .on_curves <- function(cur, grp, p, fpi0) {
   sp <- qnorm(pmin(pmax(p, .Machine$double.xmin), 1)); fx <- rep(NA_real_, length(p))
   idx <- split(seq_along(grp), factor(grp, levels = cur$ids))
   for (b in seq_along(cur$ids)) {
     i <- idx[[b]]
     if (length(i)) fx[i] <- approx(cur$s_p, cur$fx[, b], xout = sp[i], rule = 2)$y
+    k <- i[is.nan(fx[i])]
+    if (length(k)) fx[k] <- approx(cur$s_p, pmin(cur$fx[, b], .Machine$double.xmax), xout = sp[k], rule = 2)$y
   }
   pmin(fpi0 / pmax(fx, .Machine$double.xmin), 1)
 }
