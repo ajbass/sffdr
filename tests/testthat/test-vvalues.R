@@ -244,6 +244,19 @@ test_that("below a fold's smallest training p the ranking falls with p: a lone l
   expect_gt(sum(inr), 10); expect_lte(max(abs(a$fpvalues[te][inr] - o1$v[inr])), o1$edge * (1 + 1e-9))
 })
 
+test_that("at the double floor of p the continued ranking stays finite: SNPs near p = 1e-308 get an lfdr and a value", {
+  set.seed(1); n <- 60000
+  p <- 2 * pnorm(-abs(c(rnorm(n), rnorm(600, 5, 1.5)))); p[1:3] <- c(1e-40, 1e-30, 1e-20); f0 <- rep(.97, length(p))
+  fit <- sffdr:::.fit_surface(p, f0, runif(length(p)), seed = 1)
+  cur <- sffdr:::.bin_curves(fit, p_min = .Machine$double.xmin); rk <- sffdr:::.continue_curves(fit, cur)
+  expect_true(all(is.finite(rk$fx))); expect_true(all(apply(rk$fx, 2, function(x) all(diff(x) <= 0))))
+  expect_equal(max(rk$fx), .Machine$double.xmax)                              # the ratio reached the cap: the case tested
+  pt <- c(.Machine$double.xmin, 10 * .Machine$double.xmin, 1e-300, 1e-50, 1e-6, .5); f1 <- rep(.97, length(pt))
+  pl <- sffdr:::.place_on_fit(fit, cur, pt, f1, rep(.5, length(pt)))
+  q <- sffdr:::.on_curves(rk, pl$grp, pt, f1); v <- sffdr:::.v_from_curves(rk, q, pt, pl$grp)
+  expect_false(anyNA(q)); expect_false(anyNA(v)); expect_true(all(diff(q) >= 0)); expect_true(all(diff(v) >= 0))
+})
+
 test_that("the v sums in C++ are the R loops over the bins, to the bit", {
   set.seed(3); G <- 60; B <- 30; s_p <- seq(qnorm(1e-10), qnorm(1 - 1e-4), length.out = G)
   L <- apply(matrix(runif(G * B), G), 2, function(x) pmin(sort(x) * 1.3, 1)); Wn <- runif(B); Wn <- Wn / sum(Wn)

@@ -1,3 +1,12 @@
+# sffdr 1.2.5
+
+* `sffdr(folds = )` continues each fold's ranking below its smallest training
+  p (e) as the density ratio at e times e / p. Where the grid of p reaches the
+  smallest double (p near 1e-308, |z| above 37.5) the ratio could pass the
+  largest double, and the local FDR read off the curve between the floor and
+  the next grid point was NaN. The ratio is now held at the largest double.
+  Results without such p-values are identical.
+
 # sffdr 1.2.4
 
 * `sffdr(folds = )` refits only the density's tail (p < 0.1) in each fold, on
