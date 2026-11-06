@@ -85,7 +85,7 @@ fpi0 <- fpi0est(p, mpi0)
 
 ### 2. Estimating the functional significance quantities
 
-With the functional $\pi_{0}$​ estimated, we can now calculate the FDR quantities and functional p-values. The density's surrogate is the informative trait itself when there is one, and the functional $\pi_{0}$ when there are several.
+With the functional $\pi_{0}$​ estimated, we can now calculate the FDR quantities and functional p-values.
 ```{r}
 # Apply sfFDR
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0)   
@@ -106,26 +106,24 @@ plot(sffdr_out)
 
 In standard GWAS, SNPs are often correlated due to LD. To account for this, you should provide a vector indicating which SNPs are LD-independent (e.g., via pruning). `sffdr` uses these independent SNPs to fit the model, then computes the significance quantities for the entire dataset.
 
-For GWAS, we recommend cross-fitting the density by chromosome. To do this, provide the chromosome labels in `folds`: the density is then estimated leave-one-chromosome-out (LOCO) and each SNP is evaluated using the fit that excludes its chromosome, which provides calibrated functional p-values under LD (cross-fitting as in Liley and Wallace, 2021). A SNP more significant than every SNP on the other chromosomes, where the fit has no data, is ranked by its own p-value. The `nfolds` argument groups the chromosomes into fewer folds (e.g., `nfolds = 5`) to reduce computation time, and `ncores` runs the folds in parallel. Setting `nn = "cv"` chooses the bandwidth of the density by cross-validation on the left-out folds.
+For GWAS, we recommend cross-fitting by chromosome (Liley and Wallace, 2021). To do this, provide the chromosome labels in `folds`: each SNP is then evaluated using a fit that excludes its chromosome, i.e., leave-one-chromosome-out (LOCO). The `nfolds` argument groups the chromosomes into fewer folds (e.g., `nfolds = 5`) to reduce computation time, and `ncores` runs the folds in parallel.
 
 ```{r, eval = FALSE}
 # Fit model using LD-independent subset (indep_snps: TRUE if SNP is LD-independent)
 mpi0 <- pi0_model(z = z, indep_snps = indep_snps)
 fpi0 <- fpi0est(p, mpi0, indep_snps = indep_snps)
 
-# Recommended: cross-fit the density by chromosome
-# (low-powered study: consider LOCO by leaving nfolds out,
-# or nfolds = 22, i.e., the number of chromosomes in the analysis)
+# Recommended: cross-fit by chromosome (chr: the chromosome of each SNP)
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, folds = chr, nfolds = 5)
 
-# If no pruned SNPs, you can still run it (slower): no indep_snps, pi0 in the same folds
+# Without LD-independent SNPs (slower): pi0 is estimated in the same folds
 fpi0 <- fpi0est(p, pi0_model(z = z), folds = chr, nfolds = 5)
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, folds = chr, nfolds = 5)
 ```
 
    **Note on `folds`**: `sffdr()` without `folds` (as in the quick start) is superseded by cross-fitting by chromosome, which has better tail behavior under LD.
 
-   **Note on computational time**: Cross-fitting refits the density's tail (p < 0.1) once per fold and takes the rest from one fit on all SNPs, so LOCO requires 22 tail fits: on a single core, about 1 minute for 1 million SNPs and 7 minutes for 10 million (compared to 6 seconds and 1 minute for a single fit). Increasing `ncores` divides this time across cores, and `nfolds` reduces the number of fits (e.g., `nfolds = 5` requires five tail fits). We recommend `nfolds = 5`: in our simulations five folds (groups of chromosomes) provided the same power as LOCO at genome-wide significance in a third of the time. For low-powered studies, LOCO (the default) keeps more power in the functional q-values, as each fit uses the largest possible training set (the remaining 21 chromosomes). A chromosome should never be split across folds. With `nn = "cv"`, each fold is fitted once per candidate window (five windows) before the final fit.
+   **Note on computational time**: On a single core, LOCO takes about 1 minute for 1 million SNPs and 7 minutes for 10 million. We recommend `nfolds = 5`: in our simulations five folds provided the same power as LOCO at genome-wide significance in a third of the time. For low-powered studies, LOCO (the default) keeps more power in the functional q-values.
 
 **Note on choosing independent SNPs**: There are two strategies: (1) prune using plink (e.g., `--indep-pairwise 200kb 1 0.3`) and use the pruned set of SNPs as the independent set, or (2) use informed sampling of the informative traits (e.g., clumping or based on LD blocks). The latter is likely better when the primary study has low power. 
 
@@ -136,7 +134,7 @@ sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, folds = chr, nfolds = 5)
 
 If LD scores ($l_{j}$) are available (e.g., from LDSC regression), there are two ways to use them.
 
-1. **As a covariate.** SNPs with larger LD scores tag more variation and are more often associated, so the LD score is informative about association and belongs in the functional $\pi_{0}$ model alongside the informative traits:
+1. **As a covariate** in the functional $\pi_{0}$ model:
 
 ```{r, eval = FALSE}
 # LD score (log scale) added to the pi0 model built by pi0_model()
@@ -155,17 +153,15 @@ fpi0 <- fpi0est(p, mpi0, weights = w)
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, folds = chr, nfolds = 5)
 ```
 
-`sffdr()` itself does not use weights: its density is estimated over all tested SNPs, which is the set the functional p-values count errors in, and reweighting that density biases the local FDR (SNPs in LD are each tested, so each counts).
-
   **Note on incorporating LD scores**: As LD scores are available for common reference panels (e.g., 1000 Genomes), they can be easily downloaded to use in sfFDR. If you have LD scores calculated from your data then that's even better. However, it is problematic to use LD scores when the reference panel is not matched to your study population. In that case, the pruning (or informative sampling) strategy discussed above is the best option.
 
 ### Sample overlap with the informative studies
 
-If the primary and informative studies share participants (e.g., traits measured in the same biobank), pass the signed informative z-scores through `decorrelate_informative()` and use its p-values (`$p2`) as the informative p-values in `pi0_model()`; the primary p-values are used unchanged (see `?decorrelate_informative`).
+If the primary and informative studies share participants (e.g., traits measured in the same biobank), decorrelate the informative studies with `decorrelate_informative()` and use its p-values (`$p2`) in `pi0_model()`. The primary p-values are used unchanged (see `?decorrelate_informative`).
 
 ### Expected $\chi^{2}$ from annotations
 
-When the informative variable is a per-SNP prediction of the expected $\chi^{2}$ statistic from functional annotations (an LD score regression fit; Bass et al. 2026), use `pi0_model_echisq()` in place of `pi0_model()`: the signal of such a variable is at the top and its null value is known ($E[\chi^{2}] = 1$ with no association), so the spline is anchored there with its knots in the upper tail (see `?pi0_model_echisq`). The prediction is also the natural surrogate for the density.
+When the informative variable is the expected $\chi^{2}$ given functional annotations (Bass et al. 2026), use `pi0_model_echisq()` in place of `pi0_model()` (see `?pi0_model_echisq`):
 
 ```{r, eval = FALSE}
 mpi0 <- pi0_model_echisq(echisq, indep_snps = indep_snps)
@@ -173,7 +169,7 @@ fpi0 <- fpi0est(p, mpi0, indep_snps = indep_snps)
 sffdr_out <- sffdr(p, fpi0 = fpi0$fpi0, surrogate = echisq, folds = chr, nfolds = 5)
 ```
 
-Annotations can be included alongside the expected $\chi^{2}$ (e.g., the LD score, MAF, or annotation LD scores): pass them as further columns and each gets its own spline in its rank with the upper-tail knots, anchored only when the null value lies in its range. With more than one column the surrogate is the estimated functional $\pi_{0}$ (the default of `sffdr()`).
+Other annotations (e.g., the LD score or MAF) can be included as further columns:
 
 ```{r, eval = FALSE}
 mpi0 <- pi0_model_echisq(cbind(echisq = echisq, ld = ld_score), indep_snps = indep_snps)
