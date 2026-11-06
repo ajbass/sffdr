@@ -244,20 +244,17 @@ test_that("below a fold's smallest training p the ranking falls with p: a lone l
   expect_gt(sum(inr), 10); expect_lte(max(abs(a$fpvalues[te][inr] - o1$v[inr])), o1$edge * (1 + 1e-9))
 })
 
-test_that("at the double floor of p the read off the continued ranking is a number, and only the NaN reads move", {
-  set.seed(1); n <- 60000
-  p <- 2 * pnorm(-abs(c(rnorm(n), rnorm(600, 5, 1.5)))); p[1:3] <- c(1e-40, 1e-30, 1e-20); f0 <- rep(.97, length(p))
-  fit <- sffdr:::.fit_surface(p, f0, runif(length(p)), seed = 1)
-  cur <- sffdr:::.bin_curves(fit, p_min = .Machine$double.xmin); rk <- sffdr:::.continue_curves(fit, cur)
-  expect_true(any(is.infinite(rk$fx)))                                          # the continuation passed the largest double
-  pt <- c(.Machine$double.xmin, 10 * .Machine$double.xmin, 1e-300, 1e-50, 1e-6, .5); f1 <- rep(.97, length(pt))
-  pl <- sffdr:::.place_on_fit(fit, cur, pt, f1, rep(.5, length(pt)))
-  sp <- qnorm(pmax(pt, .Machine$double.xmin)); b <- match(pl$grp, rk$ids)            # the plain read, as before 1.2.5
-  q0 <- pmin(f1 / pmax(sapply(seq_along(pt), function(i) approx(rk$s_p, rk$fx[, b[i]], xout = sp[i], rule = 2)$y), .Machine$double.xmin), 1)
-  expect_true(any(is.nan(q0)))
-  q <- sffdr:::.on_curves(rk, pl$grp, pt, f1); v <- sffdr:::.v_from_curves(rk, q, pt, pl$grp)
-  expect_identical(q[!is.nan(q0)], q0[!is.nan(q0)])
-  expect_false(anyNA(q)); expect_false(anyNA(v)); expect_true(all(diff(q) >= 0)); expect_true(all(diff(v) >= 0))
+test_that("where the continued ranking passes the largest double the read is a number, and only the NaN reads move", {
+  s <- seq(qnorm(.Machine$double.xmin), qnorm(1 - 1e-4), length.out = 600)       # the grid of .bin_curves at the floor of p
+  fx <- outer(1 / pnorm(s), c(10, 1))                                             # ratio e / p as continued: bin 1 passes the largest double at the floor
+  cur <- list(s_p = s, fx = fx, lfdr = sweep(fx, 2, c(.9, .95), function(f, p0) pmin(p0 / f, 1)), W = c(500, 500), ids = 1:2)
+  expect_true(is.infinite(fx[1, 1])); expect_true(all(is.finite(fx[-1, ])))
+  pt <- c(.Machine$double.xmin, pnorm(mean(s[1:2])), 1e-300, 1e-50, 1e-6, .5); grp <- rep(1L, length(pt)); f1 <- rep(.9, length(pt))
+  q0 <- pmin(f1 / pmax(approx(s, fx[, 1], xout = qnorm(pt), rule = 2)$y, .Machine$double.xmin), 1)    # the plain read, as before 1.2.5
+  expect_identical(is.nan(q0), c(FALSE, TRUE, FALSE, FALSE, FALSE, FALSE))
+  q <- sffdr:::.on_curves(cur, grp, pt, f1); v <- sffdr:::.v_from_curves(cur, q, pt, grp)
+  expect_identical(q[-2], q0[-2]); expect_true(is.finite(q[2]))
+  expect_false(anyNA(v)); expect_true(all(diff(q) >= 0)); expect_true(all(diff(v) >= 0))
 })
 
 test_that("the v sums in C++ are the R loops over the bins, to the bit", {
